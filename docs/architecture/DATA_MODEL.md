@@ -226,6 +226,14 @@ The first implemented schema phase includes:
 
 These tables form the foundation for later document, standards, NCR, CAPA, file, and audit modules.
 
+## Implementation Phase Notes - Document Control
+The second implemented schema phase includes:
+- documents
+- document_revisions
+- document_approvals
+
+This phase establishes the first core QMS business module and separates document identity from revision-specific history and approval activity.
+
 tenants
   └── programs
   └── users

@@ -1,3 +1,6 @@
+from app.models.document import Document
+from app.models.document_approval import DocumentApproval
+from app.models.document_revision import DocumentRevision
 from app.models.program import Program
 from app.models.role import Role
 from app.models.tenant import Tenant
@@ -12,4 +15,7 @@ __all__ = [
     "Role",
     "UserRoleAssignment",
     "UserProgramAssignment",
+    "Document",
+    "DocumentRevision",
+    "DocumentApproval",
 ]
