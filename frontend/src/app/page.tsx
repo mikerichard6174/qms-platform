@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { getDocuments } from "@/lib/api";
 
 export default async function Home() {
@@ -11,7 +13,8 @@ export default async function Home() {
     const documentResponse = await getDocuments();
     documentCount = documentResponse.total;
     documents = documentResponse.items;
-  } catch {
+  } catch (error) {
+    console.error("Dashboard document fetch failed:", error);
     backendStatus = "Backend unavailable";
     backendStatusClass = "border-red-200 bg-red-50 text-red-700";
   }
@@ -30,22 +33,28 @@ export default async function Home() {
           </div>
 
           <nav className="space-y-2">
-            <a className="block rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white">
+            <Link
+              href="/"
+              className="block rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white"
+            >
               Dashboard
-            </a>
-            <a className="block rounded-lg px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
+            </Link>
+            <Link
+              href="/documents"
+              className="block rounded-lg px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            >
               Documents
-            </a>
-            <a className="block rounded-lg px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
+            </Link>
+            <a className="block rounded-lg px-4 py-3 text-sm font-medium text-slate-400">
               Revisions
             </a>
-            <a className="block rounded-lg px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
+            <a className="block rounded-lg px-4 py-3 text-sm font-medium text-slate-400">
               Approvals
             </a>
-            <a className="block rounded-lg px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
+            <a className="block rounded-lg px-4 py-3 text-sm font-medium text-slate-400">
               Standards
             </a>
-            <a className="block rounded-lg px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
+            <a className="block rounded-lg px-4 py-3 text-sm font-medium text-slate-400">
               NCR / CAPA
             </a>
           </nav>
@@ -107,12 +116,19 @@ export default async function Home() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-bold text-slate-950">
-                  Controlled Documents
+                  Recent Controlled Documents
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Live data pulled from your FastAPI backend.
+                  Live document data pulled from your FastAPI backend.
                 </p>
               </div>
+
+              <Link
+                href="/documents"
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+              >
+                View all documents
+              </Link>
             </div>
 
             <div className="overflow-hidden rounded-xl border border-slate-200">
@@ -137,10 +153,15 @@ export default async function Home() {
                       </td>
                     </tr>
                   ) : (
-                    documents.map((document) => (
+                    documents.slice(0, 5).map((document) => (
                       <tr key={document.id}>
                         <td className="px-4 py-3 font-medium text-slate-950">
-                          {document.document_number}
+                          <Link
+                            href={`/documents/${document.id}`}
+                            className="hover:underline"
+                          >
+                            {document.document_number}
+                          </Link>
                         </td>
                         <td className="px-4 py-3 text-slate-700">
                           {document.title}
