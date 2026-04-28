@@ -72,7 +72,15 @@ class DocumentApprovalService:
                 detail="Only pending approvals can be approved.",
             )
 
-        return self.approval_repository.mark_approved(db=db, approval=approval, comment=comment)
+        updated_approval = self.approval_repository.mark_approved(
+            db=db,
+            approval=approval,
+            comment=comment,
+        )
+
+        self._evaluate_parent_revision(db=db, revision_id=updated_approval.document_revision_id)
+
+        return updated_approval
 
     def reject(
         self,
@@ -87,4 +95,18 @@ class DocumentApprovalService:
                 detail="Only pending approvals can be rejected.",
             )
 
-        return self.approval_repository.mark_rejected(db=db, approval=approval, comment=comment)
+        updated_approval = self.approval_repository.mark_rejected(
+            db=db,
+            approval=approval,
+            comment=comment,
+        )
+
+        self._evaluate_parent_revision(db=db, revision_id=updated_approval.document_revision_id)
+
+        return updated_approval
+
+    def _evaluate_parent_revision(self, db: Session, revision_id: uuid.UUID) -> None:
+        from app.services.document_revision_service import DocumentRevisionService
+
+        revision_service = DocumentRevisionService()
+        revision_service.evaluate_approval_state(db=db, revision_id=revision_id)

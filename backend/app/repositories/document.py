@@ -28,6 +28,12 @@ class DocumentRepository:
         db.refresh(document)
         return document
 
+    def save(self, db: Session, document: Document) -> Document:
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+        return document
+
     def get_by_id(self, db: Session, document_id: uuid.UUID) -> Document | None:
         stmt = select(Document).where(Document.id == document_id)
         return db.scalar(stmt)
@@ -36,7 +42,12 @@ class DocumentRepository:
         stmt = select(Document).order_by(Document.created_at.desc())
         return list(db.scalars(stmt).all())
 
-    def get_by_document_number(self, db: Session, tenant_id: uuid.UUID, document_number: str) -> Document | None:
+    def get_by_document_number(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        document_number: str,
+    ) -> Document | None:
         stmt = select(Document).where(
             Document.tenant_id == tenant_id,
             Document.document_number == document_number,

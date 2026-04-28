@@ -44,3 +44,30 @@ def list_document_revisions_for_document(
         items=[DocumentRevisionResponse.model_validate(item) for item in items],
         total=total,
     )
+
+
+@router.post("/{revision_id}/submit-for-review", response_model=DocumentRevisionResponse)
+def submit_document_revision_for_review(
+    revision_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> DocumentRevisionResponse:
+    revision = service.submit_for_review(db=db, revision_id=revision_id)
+    return DocumentRevisionResponse.model_validate(revision)
+
+
+@router.post("/{revision_id}/evaluate-approval-state", response_model=DocumentRevisionResponse)
+def evaluate_document_revision_approval_state(
+    revision_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> DocumentRevisionResponse:
+    revision = service.evaluate_approval_state(db=db, revision_id=revision_id)
+    return DocumentRevisionResponse.model_validate(revision)
+
+
+@router.post("/{revision_id}/make-effective", response_model=DocumentRevisionResponse)
+def make_document_revision_effective(
+    revision_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> DocumentRevisionResponse:
+    revision = service.make_effective(db=db, revision_id=revision_id)
+    return DocumentRevisionResponse.model_validate(revision)

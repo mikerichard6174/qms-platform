@@ -30,6 +30,12 @@ class DocumentRevisionRepository:
         db.refresh(revision)
         return revision
 
+    def save(self, db: Session, revision: DocumentRevision) -> DocumentRevision:
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+        return revision
+
     def get_by_id(self, db: Session, revision_id: uuid.UUID) -> DocumentRevision | None:
         stmt = select(DocumentRevision).where(DocumentRevision.id == revision_id)
         return db.scalar(stmt)
@@ -51,5 +57,16 @@ class DocumentRevisionRepository:
         stmt = select(DocumentRevision).where(
             DocumentRevision.document_id == document_id,
             DocumentRevision.revision_label == revision_label,
+        )
+        return db.scalar(stmt)
+
+    def get_effective_revision_for_document(
+        self,
+        db: Session,
+        document_id: uuid.UUID,
+    ) -> DocumentRevision | None:
+        stmt = select(DocumentRevision).where(
+            DocumentRevision.document_id == document_id,
+            DocumentRevision.is_effective.is_(True),
         )
         return db.scalar(stmt)
