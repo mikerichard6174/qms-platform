@@ -1,4 +1,21 @@
-export default function Home() {
+import { getDocuments } from "@/lib/api";
+
+export default async function Home() {
+  let documentCount = 0;
+  let documents: Awaited<ReturnType<typeof getDocuments>>["items"] = [];
+  let backendStatus = "Connected";
+  let backendStatusClass =
+    "border-emerald-200 bg-emerald-50 text-emerald-700";
+
+  try {
+    const documentResponse = await getDocuments();
+    documentCount = documentResponse.total;
+    documents = documentResponse.items;
+  } catch {
+    backendStatus = "Backend unavailable";
+    backendStatusClass = "border-red-200 bg-red-50 text-red-700";
+  }
+
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
       <div className="flex min-h-screen">
@@ -45,8 +62,10 @@ export default function Home() {
               </h2>
             </div>
 
-            <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">
-              Backend: Ready to connect
+            <div
+              className={`rounded-full border px-4 py-2 text-sm font-medium ${backendStatusClass}`}
+            >
+              Backend: {backendStatus}
             </div>
           </header>
 
@@ -55,7 +74,9 @@ export default function Home() {
               <p className="text-sm font-medium text-slate-500">
                 Controlled Documents
               </p>
-              <p className="mt-3 text-4xl font-bold text-slate-950">0</p>
+              <p className="mt-3 text-4xl font-bold text-slate-950">
+                {documentCount}
+              </p>
               <p className="mt-2 text-sm text-slate-500">
                 Documents tracked in the QMS.
               </p>
@@ -86,43 +107,60 @@ export default function Home() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-bold text-slate-950">
-                  Document Control Workflow
+                  Controlled Documents
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  The current MVP workflow controls document identity, revision history,
-                  approvals, and effective release status.
+                  Live data pulled from your FastAPI backend.
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-4">
-              <div className="rounded-xl border border-slate-200 p-4">
-                <p className="font-semibold text-slate-950">1. Create Document</p>
-                <p className="mt-2 text-sm text-slate-500">
-                  Register the controlled document record.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-4">
-                <p className="font-semibold text-slate-950">2. Create Revision</p>
-                <p className="mt-2 text-sm text-slate-500">
-                  Add revision history and change summary.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-4">
-                <p className="font-semibold text-slate-950">3. Approve</p>
-                <p className="mt-2 text-sm text-slate-500">
-                  Capture review and approval decisions.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-4">
-                <p className="font-semibold text-slate-950">4. Make Effective</p>
-                <p className="mt-2 text-sm text-slate-500">
-                  Set the current controlled revision.
-                </p>
-              </div>
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <table className="w-full border-collapse text-left text-sm">
+                <thead className="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Document #</th>
+                    <th className="px-4 py-3 font-semibold">Title</th>
+                    <th className="px-4 py-3 font-semibold">Type</th>
+                    <th className="px-4 py-3 font-semibold">Status</th>
+                    <th className="px-4 py-3 font-semibold">Current Revision</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {documents.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-6 text-center text-slate-500"
+                      >
+                        No documents found.
+                      </td>
+                    </tr>
+                  ) : (
+                    documents.map((document) => (
+                      <tr key={document.id}>
+                        <td className="px-4 py-3 font-medium text-slate-950">
+                          {document.document_number}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {document.title}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {document.document_type}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                            {document.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">
+                          {document.current_revision_id ? "Assigned" : "None"}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
