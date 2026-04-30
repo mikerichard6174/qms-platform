@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { DocumentWorkflowActions } from "@/components/documents/DocumentWorkflowActions";
 import {
   getDocument,
   getDocumentApprovals,
@@ -183,7 +184,7 @@ export default async function DocumentDetailPage({
                 Revision History
               </h3>
               <p className="mt-1 text-sm text-slate-500">
-                Revisions are listed newest first and include approval records.
+                Revisions are listed newest first and include approval records and workflow actions.
               </p>
             </div>
 
@@ -227,6 +228,8 @@ export default async function DocumentDetailPage({
 
                         <div className="text-right text-sm text-slate-500">
                           <p>Created: {formatDateTime(revision.created_at)}</p>
+                          <p>Submitted: {formatDateTime(revision.submitted_for_approval_at)}</p>
+                          <p>Approved: {formatDateTime(revision.approved_at)}</p>
                           <p>Effective: {formatDate(revision.effective_date)}</p>
                         </div>
                       </div>
@@ -287,6 +290,11 @@ export default async function DocumentDetailPage({
                           </div>
                         )}
                       </div>
+
+                      <DocumentWorkflowActions
+                        revision={revision}
+                        approvals={approvals}
+                      />
                     </div>
                   );
                 })
