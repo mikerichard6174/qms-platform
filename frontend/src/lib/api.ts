@@ -1,3 +1,4 @@
+import type { DashboardSummary } from "@/types/dashboard";
 import type {
   DocumentListResponse,
   DocumentRecord,
@@ -49,6 +50,10 @@ async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   }
 
   return response.json();
+}
+
+export async function getDashboardSummary(): Promise<DashboardSummary> {
+  return apiGet<DashboardSummary>("/dashboard/summary");
 }
 
 export async function getDocuments(): Promise<DocumentListResponse> {
