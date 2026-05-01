@@ -52,6 +52,47 @@ async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return response.json();
 }
 
+export type CreateDocumentPayload = {
+  tenant_id: string;
+  program_id: string | null;
+  document_number: string;
+  title: string;
+  document_type: string;
+  owner_user_id: string | null;
+  status: string;
+  is_controlled: boolean;
+  review_due_date: string | null;
+  metadata_json: Record<string, unknown> | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+};
+
+export type CreateRevisionPayload = {
+  document_id: string;
+  tenant_id: string;
+  revision_label: string;
+  revision_number: number | null;
+  change_summary: string | null;
+  file_id: string | null;
+  status: string;
+  is_current: boolean;
+  is_effective: boolean;
+  effective_date: string | null;
+  obsolete_date: string | null;
+  approved_by_user_id: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+};
+
+export type CreateApprovalPayload = {
+  document_revision_id: string;
+  tenant_id: string;
+  approver_user_id: string;
+  approval_type: string;
+  status: string;
+  comment: string | null;
+};
+
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   return apiGet<DashboardSummary>("/dashboard/summary");
 }
@@ -64,6 +105,12 @@ export async function getDocument(documentId: string): Promise<DocumentRecord> {
   return apiGet<DocumentRecord>(`/documents/${documentId}`);
 }
 
+export async function createDocument(
+  payload: CreateDocumentPayload,
+): Promise<DocumentRecord> {
+  return apiPost<DocumentRecord>("/documents", payload);
+}
+
 export async function getDocumentRevisions(
   documentId: string,
 ): Promise<DocumentRevisionListResponse> {
@@ -72,12 +119,24 @@ export async function getDocumentRevisions(
   );
 }
 
+export async function createDocumentRevision(
+  payload: CreateRevisionPayload,
+): Promise<DocumentRevisionRecord> {
+  return apiPost<DocumentRevisionRecord>("/document-revisions", payload);
+}
+
 export async function getDocumentApprovals(
   revisionId: string,
 ): Promise<DocumentApprovalListResponse> {
   return apiGet<DocumentApprovalListResponse>(
     `/document-approvals/by-revision/${revisionId}`,
   );
+}
+
+export async function createDocumentApproval(
+  payload: CreateApprovalPayload,
+): Promise<DocumentApprovalRecord> {
+  return apiPost<DocumentApprovalRecord>("/document-approvals", payload);
 }
 
 export async function submitRevisionForReview(

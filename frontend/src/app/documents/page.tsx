@@ -1,7 +1,11 @@
 import Link from "next/link";
 
+import { CreateDocumentForm } from "@/components/documents/CreateDocumentForm";
 import { AppShell } from "@/components/layout/AppShell";
 import { getDocuments } from "@/lib/api";
+
+const DEFAULT_TENANT_ID =
+  process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ?? "";
 
 export default async function DocumentsPage() {
   let documents: Awaited<ReturnType<typeof getDocuments>>["items"] = [];
@@ -34,12 +38,14 @@ export default async function DocumentsPage() {
         </div>
       </header>
 
+      <CreateDocumentForm defaultTenantId={DEFAULT_TENANT_ID} />
+
       {errorMessage ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
+        <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
           {errorMessage}
         </div>
       ) : (
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
           <div className="mb-4">
             <h3 className="text-xl font-bold text-slate-950">
               Document Register

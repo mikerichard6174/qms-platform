@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CreateApprovalForm } from "@/components/documents/CreateApprovalForm";
+import { CreateRevisionForm } from "@/components/documents/CreateRevisionForm";
 import { DocumentWorkflowActions } from "@/components/documents/DocumentWorkflowActions";
 import { AppShell } from "@/components/layout/AppShell";
 import {
@@ -10,6 +12,9 @@ import {
 } from "@/lib/api";
 import type { DocumentApprovalRecord } from "@/types/documentApproval";
 import type { DocumentRevisionRecord } from "@/types/documentRevision";
+
+const DEFAULT_APPROVER_USER_ID =
+  process.env.NEXT_PUBLIC_DEFAULT_APPROVER_USER_ID ?? "";
 
 type DocumentDetailPageProps = {
   params: Promise<{
@@ -139,6 +144,8 @@ export default async function DocumentDetailPage({
         </div>
       </div>
 
+      <CreateRevisionForm documentId={document.id} tenantId={document.tenant_id} />
+
       <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
         <div className="mb-4">
           <h3 className="text-xl font-bold text-slate-950">
@@ -251,6 +258,12 @@ export default async function DocumentDetailPage({
                         </table>
                       </div>
                     )}
+
+                    <CreateApprovalForm
+                      revisionId={revision.id}
+                      tenantId={revision.tenant_id}
+                      defaultApproverUserId={DEFAULT_APPROVER_USER_ID}
+                    />
                   </div>
 
                   <DocumentWorkflowActions revision={revision} approvals={approvals} />
