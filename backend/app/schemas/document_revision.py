@@ -9,6 +9,7 @@ class DocumentRevisionBase(BaseModel):
     revision_number: int | None = None
     change_summary: str | None = None
     file_id: uuid.UUID | None = None
+    external_file_url: str | None = None
     status: str = "draft"
     is_current: bool = False
     is_effective: bool = False

@@ -46,6 +46,27 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function ExternalFileLink({ url }: { url: string | null }) {
+  if (!url) {
+    return (
+      <span className="text-sm text-slate-500">
+        No external document link provided.
+      </span>
+    );
+  }
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800"
+    >
+      View External Document
+    </a>
+  );
+}
+
 async function getApprovalsByRevision(
   revisions: DocumentRevisionRecord[],
 ): Promise<Record<string, DocumentApprovalRecord[]>> {
@@ -152,7 +173,7 @@ export default async function DocumentDetailPage({
             Revision History
           </h3>
           <p className="mt-1 text-sm text-slate-500">
-            Revisions are listed newest first and include approval records and workflow actions.
+            Revisions are listed newest first and include approval records, workflow actions, and external document links.
           </p>
         </div>
 
@@ -172,7 +193,7 @@ export default async function DocumentDetailPage({
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-3">
                         <h4 className="text-lg font-bold text-slate-950">
                           Revision {revision.revision_label}
                         </h4>
@@ -192,6 +213,10 @@ export default async function DocumentDetailPage({
                       <p className="mt-2 text-sm text-slate-600">
                         {revision.change_summary ?? "No change summary provided."}
                       </p>
+
+                      <div className="mt-4">
+                        <ExternalFileLink url={revision.external_file_url} />
+                      </div>
                     </div>
 
                     <div className="text-right text-sm text-slate-500">

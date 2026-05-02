@@ -112,6 +112,11 @@ def get_or_create_revision(db, document_id, tenant_id, created_by_user_id):
         )
     )
     if existing:
+        if not existing.external_file_url:
+            existing.external_file_url = "https://company.sharepoint.com/sites/qms/Shared%20Documents/QMS-DEV-001-Rev-A.docx"
+            db.add(existing)
+            db.commit()
+            db.refresh(existing)
         return existing
 
     revision = DocumentRevision(
@@ -122,6 +127,7 @@ def get_or_create_revision(db, document_id, tenant_id, created_by_user_id):
         revision_number=1,
         change_summary="Initial seeded revision for development testing.",
         file_id=None,
+        external_file_url="https://company.sharepoint.com/sites/qms/Shared%20Documents/QMS-DEV-001-Rev-A.docx",
         status="draft",
         is_current=False,
         is_effective=False,
@@ -220,6 +226,7 @@ def main() -> None:
         print(f"Document: {document.id} | {document.document_number}")
         print(f"Revision: {revision.id} | Rev {revision.revision_label}")
         print(f"Approval: {approval.id} | {approval.status}")
+        print(f"External File URL: {revision.external_file_url}")
 
     finally:
         db.close()

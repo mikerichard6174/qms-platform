@@ -19,6 +19,7 @@ export function CreateRevisionForm({
   const [revisionLabel, setRevisionLabel] = useState("");
   const [revisionNumber, setRevisionNumber] = useState("");
   const [changeSummary, setChangeSummary] = useState("");
+  const [externalFileUrl, setExternalFileUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -35,6 +36,7 @@ export function CreateRevisionForm({
         revision_number: revisionNumber ? Number(revisionNumber) : null,
         change_summary: changeSummary || null,
         file_id: null,
+        external_file_url: externalFileUrl || null,
         status: "draft",
         is_current: false,
         is_effective: false,
@@ -48,6 +50,7 @@ export function CreateRevisionForm({
       setRevisionLabel("");
       setRevisionNumber("");
       setChangeSummary("");
+      setExternalFileUrl("");
       setMessage("Revision created successfully.");
       router.refresh();
     } catch (error) {
@@ -62,7 +65,7 @@ export function CreateRevisionForm({
       <div className="mb-4">
         <h3 className="text-xl font-bold text-slate-950">Create Revision</h3>
         <p className="mt-1 text-sm text-slate-500">
-          Add a new draft revision for this document.
+          Add a new draft revision and link it to the Word/SharePoint file.
         </p>
       </div>
 
@@ -92,6 +95,22 @@ export function CreateRevisionForm({
             placeholder="2"
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
+        </label>
+
+        <label className="block md:col-span-3">
+          <span className="text-sm font-medium text-slate-700">
+            External File URL
+          </span>
+          <input
+            value={externalFileUrl}
+            onChange={(event) => setExternalFileUrl(event.target.value)}
+            type="url"
+            placeholder="https://company.sharepoint.com/sites/qms/Shared%20Documents/example.docx"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Use the SharePoint or external storage link for this specific revision.
+          </p>
         </label>
 
         <label className="block md:col-span-3">

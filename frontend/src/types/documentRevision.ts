@@ -6,6 +6,7 @@ export type DocumentRevisionRecord = {
   revision_number: number | null;
   change_summary: string | null;
   file_id: string | null;
+  external_file_url: string | null;
   status: string;
   is_current: boolean;
   is_effective: boolean;

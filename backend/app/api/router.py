@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.routes.audit_events import router as audit_events_router
 from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.document_approvals import router as document_approvals_router
 from app.api.routes.document_revisions import router as document_revisions_router
@@ -12,3 +13,4 @@ api_router.include_router(dashboard_router)
 api_router.include_router(documents_router)
 api_router.include_router(document_revisions_router)
 api_router.include_router(document_approvals_router)
+api_router.include_router(audit_events_router)

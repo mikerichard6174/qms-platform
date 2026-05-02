@@ -1,3 +1,4 @@
+from app.models.audit_event import AuditEvent
 from app.models.document import Document
 from app.models.document_approval import DocumentApproval
 from app.models.document_revision import DocumentRevision
@@ -18,4 +19,5 @@ __all__ = [
     "Document",
     "DocumentRevision",
     "DocumentApproval",
+    "AuditEvent",
 ]

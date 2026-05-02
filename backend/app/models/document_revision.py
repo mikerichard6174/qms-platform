@@ -29,6 +29,7 @@ class DocumentRevision(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UUID(as_uuid=True),
         nullable=True,
     )
+    external_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_effective: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

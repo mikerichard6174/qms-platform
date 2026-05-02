@@ -16,6 +16,7 @@ class DocumentRevisionRepository:
             revision_number=data.revision_number,
             change_summary=data.change_summary,
             file_id=data.file_id,
+            external_file_url=data.external_file_url,
             status=data.status,
             is_current=data.is_current,
             is_effective=data.is_effective,
