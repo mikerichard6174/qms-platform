@@ -1,15 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AuditEventTimeline } from "@/components/documents/AuditEventTimeline";
 import { CreateApprovalForm } from "@/components/documents/CreateApprovalForm";
 import { CreateRevisionForm } from "@/components/documents/CreateRevisionForm";
 import { DocumentWorkflowActions } from "@/components/documents/DocumentWorkflowActions";
 import { AppShell } from "@/components/layout/AppShell";
 import {
+  getAuditEventsForEntity,
+  getAuditEventsForTenant,
   getDocument,
   getDocumentApprovals,
   getDocumentRevisions,
 } from "@/lib/api";
+import type { AuditEventRecord } from "@/types/auditEvent";
 import type { DocumentApprovalRecord } from "@/types/documentApproval";
 import type { DocumentRevisionRecord } from "@/types/documentRevision";
 
@@ -88,6 +92,65 @@ async function getApprovalsByRevision(
   return Object.fromEntries(approvalEntries);
 }
 
+async function getDocumentRelatedAuditEvents(
+  documentId: string,
+  tenantId: string,
+  revisions: DocumentRevisionRecord[],
+  approvalsByRevision: Record<string, DocumentApprovalRecord[]>,
+): Promise<AuditEventRecord[]> {
+  try {
+    const tenantAuditResponse = await getAuditEventsForTenant(tenantId);
+
+    const revisionIds = new Set(revisions.map((revision) => revision.id));
+    const approvalIds = new Set(
+      Object.values(approvalsByRevision)
+        .flat()
+        .map((approval) => approval.id),
+    );
+
+    return tenantAuditResponse.items.filter((event) => {
+      if (event.entity_type === "document" && event.entity_id === documentId) {
+        return true;
+      }
+
+      if (
+        event.entity_type === "document_revision" &&
+        revisionIds.has(event.entity_id)
+      ) {
+        return true;
+      }
+
+      if (
+        event.entity_type === "document_approval" &&
+        approvalIds.has(event.entity_id)
+      ) {
+        return true;
+      }
+
+      const metadataDocumentId = event.metadata_json?.document_id;
+
+      if (typeof metadataDocumentId === "string" && metadataDocumentId === documentId) {
+        return true;
+      }
+
+      return false;
+    });
+  } catch (error) {
+    console.error("Failed to fetch related document audit events:", error);
+
+    try {
+      const documentAuditResponse = await getAuditEventsForEntity(
+        "document",
+        documentId,
+      );
+      return documentAuditResponse.items;
+    } catch (fallbackError) {
+      console.error("Document audit fallback failed:", fallbackError);
+      return [];
+    }
+  }
+}
+
 export default async function DocumentDetailPage({
   params,
 }: DocumentDetailPageProps) {
@@ -96,12 +159,19 @@ export default async function DocumentDetailPage({
   let document;
   let revisions: DocumentRevisionRecord[] = [];
   let approvalsByRevision: Record<string, DocumentApprovalRecord[]> = {};
+  let auditEvents: AuditEventRecord[] = [];
 
   try {
     document = await getDocument(id);
     const revisionResponse = await getDocumentRevisions(id);
     revisions = revisionResponse.items;
     approvalsByRevision = await getApprovalsByRevision(revisions);
+    auditEvents = await getDocumentRelatedAuditEvents(
+      document.id,
+      document.tenant_id,
+      revisions,
+      approvalsByRevision,
+    );
   } catch (error) {
     console.error("Document detail fetch failed:", error);
     notFound();
@@ -298,6 +368,12 @@ export default async function DocumentDetailPage({
           )}
         </div>
       </section>
+
+      <AuditEventTimeline
+        title="Document Audit Trail"
+        description="This timeline shows audit events tied to this document, its revisions, and its approval records."
+        events={auditEvents}
+      />
     </AppShell>
   );
 }

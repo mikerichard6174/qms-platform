@@ -3,14 +3,17 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.repositories.document import DocumentRepository
-from app.schemas.document import DocumentCreate
 from app.models.document import Document
+from app.repositories.document import DocumentRepository
+from app.schemas.audit_event import AuditEventCreate
+from app.schemas.document import DocumentCreate
+from app.services.audit_event_service import AuditEventService
 
 
 class DocumentService:
     def __init__(self) -> None:
         self.repository = DocumentRepository()
+        self.audit_service = AuditEventService()
 
     def create_document(self, db: Session, data: DocumentCreate) -> Document:
         existing = self.repository.get_by_document_number(
@@ -24,7 +27,31 @@ class DocumentService:
                 detail="A document with that number already exists for this tenant.",
             )
 
-        return self.repository.create(db=db, data=data)
+        document = self.repository.create(db=db, data=data)
+
+        self.audit_service.create_event(
+            db=db,
+            data=AuditEventCreate(
+                tenant_id=document.tenant_id,
+                actor_user_id=document.created_by_user_id,
+                entity_type="document",
+                entity_id=document.id,
+                action="created",
+                summary=f"Document {document.document_number} was created.",
+                old_values_json=None,
+                new_values_json={
+                    "document_number": document.document_number,
+                    "title": document.title,
+                    "document_type": document.document_type,
+                    "status": document.status,
+                },
+                metadata_json={
+                    "source": "document_service.create_document",
+                },
+            ),
+        )
+
+        return document
 
     def get_document(self, db: Session, document_id: uuid.UUID) -> Document:
         document = self.repository.get_by_id(db=db, document_id=document_id)

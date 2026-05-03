@@ -1,3 +1,4 @@
+import type { AuditEventListResponse } from "@/types/auditEvent";
 import type { DashboardSummary } from "@/types/dashboard";
 import type {
   DocumentListResponse,
@@ -182,4 +183,23 @@ export async function rejectDocumentApproval(
     `/document-approvals/${approvalId}/reject`,
     { comment },
   );
+}
+
+export async function getAuditEvents(): Promise<AuditEventListResponse> {
+  return apiGet<AuditEventListResponse>("/audit-events");
+}
+
+export async function getAuditEventsForEntity(
+  entityType: string,
+  entityId: string,
+): Promise<AuditEventListResponse> {
+  return apiGet<AuditEventListResponse>(
+    `/audit-events/by-entity/${entityType}/${entityId}`,
+  );
+}
+
+export async function getAuditEventsForTenant(
+  tenantId: string,
+): Promise<AuditEventListResponse> {
+  return apiGet<AuditEventListResponse>(`/audit-events/by-tenant/${tenantId}`);
 }
