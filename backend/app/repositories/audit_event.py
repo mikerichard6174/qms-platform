@@ -27,8 +27,18 @@ class AuditEventRepository:
 
         return event
 
-    def list_all(self, db: Session) -> list[AuditEvent]:
-        stmt = select(AuditEvent).order_by(AuditEvent.created_at.desc())
+    def list_all(
+        self,
+        db: Session,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[AuditEvent]:
+        stmt = (
+            select(AuditEvent)
+            .order_by(AuditEvent.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
         return list(db.scalars(stmt).all())
 
     def list_by_entity(
@@ -36,6 +46,8 @@ class AuditEventRepository:
         db: Session,
         entity_type: str,
         entity_id: uuid.UUID,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[AuditEvent]:
         stmt = (
             select(AuditEvent)
@@ -44,6 +56,8 @@ class AuditEventRepository:
                 AuditEvent.entity_id == entity_id,
             )
             .order_by(AuditEvent.created_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
         return list(db.scalars(stmt).all())
 
@@ -51,10 +65,36 @@ class AuditEventRepository:
         self,
         db: Session,
         tenant_id: uuid.UUID,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[AuditEvent]:
         stmt = (
             select(AuditEvent)
             .where(AuditEvent.tenant_id == tenant_id)
             .order_by(AuditEvent.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(db.scalars(stmt).all())
+
+    def list_by_tenant_and_entity(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        entity_type: str,
+        entity_id: uuid.UUID,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[AuditEvent]:
+        stmt = (
+            select(AuditEvent)
+            .where(
+                AuditEvent.tenant_id == tenant_id,
+                AuditEvent.entity_type == entity_type,
+                AuditEvent.entity_id == entity_id,
+            )
+            .order_by(AuditEvent.created_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
         return list(db.scalars(stmt).all())

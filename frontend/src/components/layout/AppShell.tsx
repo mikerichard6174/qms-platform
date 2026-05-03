@@ -3,7 +3,14 @@ import type { ReactNode } from "react";
 
 type AppShellProps = {
   children: ReactNode;
-  activeNav?: "dashboard" | "documents" | "revisions" | "approvals" | "standards" | "ncr-capa";
+  activeNav?:
+    | "dashboard"
+    | "documents"
+    | "revisions"
+    | "approvals"
+    | "audit-events"
+    | "standards"
+    | "ncr-capa";
 };
 
 function navClass(isActive: boolean): string {
@@ -46,6 +53,14 @@ export function AppShell({ children, activeNav = "dashboard" }: AppShellProps) {
 
             <a className={disabledNavClass()}>Revisions</a>
             <a className={disabledNavClass()}>Approvals</a>
+
+            <Link
+              href="/audit-events"
+              className={navClass(activeNav === "audit-events")}
+            >
+              Audit Trail
+            </Link>
+
             <a className={disabledNavClass()}>Standards</a>
             <a className={disabledNavClass()}>NCR / CAPA</a>
           </nav>

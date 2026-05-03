@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps.db import get_db
@@ -14,9 +14,25 @@ service = AuditEventService()
 
 @router.get("", response_model=AuditEventListResponse)
 def list_audit_events(
+    tenant_id: uuid.UUID | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> AuditEventListResponse:
-    items, total = service.list_events(db=db)
+    if tenant_id is not None:
+        items, total = service.list_events_for_tenant(
+            db=db,
+            tenant_id=tenant_id,
+            limit=limit,
+            offset=offset,
+        )
+    else:
+        items, total = service.list_events(
+            db=db,
+            limit=limit,
+            offset=offset,
+        )
+
     return AuditEventListResponse(
         items=[AuditEventResponse.model_validate(item) for item in items],
         total=total,
@@ -26,9 +42,16 @@ def list_audit_events(
 @router.get("/by-tenant/{tenant_id}", response_model=AuditEventListResponse)
 def list_audit_events_for_tenant(
     tenant_id: uuid.UUID,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> AuditEventListResponse:
-    items, total = service.list_events_for_tenant(db=db, tenant_id=tenant_id)
+    items, total = service.list_events_for_tenant(
+        db=db,
+        tenant_id=tenant_id,
+        limit=limit,
+        offset=offset,
+    )
     return AuditEventListResponse(
         items=[AuditEventResponse.model_validate(item) for item in items],
         total=total,
@@ -39,12 +62,16 @@ def list_audit_events_for_tenant(
 def list_audit_events_for_entity(
     entity_type: str,
     entity_id: uuid.UUID,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> AuditEventListResponse:
     items, total = service.list_events_for_entity(
         db=db,
         entity_type=entity_type,
         entity_id=entity_id,
+        limit=limit,
+        offset=offset,
     )
     return AuditEventListResponse(
         items=[AuditEventResponse.model_validate(item) for item in items],

@@ -53,6 +53,10 @@ async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return response.json();
 }
 
+function buildAuditQuery(limit = 100, offset = 0): string {
+  return `limit=${limit}&offset=${offset}`;
+}
+
 export type CreateDocumentPayload = {
   tenant_id: string;
   program_id: string | null;
@@ -185,21 +189,35 @@ export async function rejectDocumentApproval(
   );
 }
 
-export async function getAuditEvents(): Promise<AuditEventListResponse> {
-  return apiGet<AuditEventListResponse>("/audit-events");
+export async function getAuditEvents(
+  limit = 100,
+  offset = 0,
+): Promise<AuditEventListResponse> {
+  return apiGet<AuditEventListResponse>(
+    `/audit-events?${buildAuditQuery(limit, offset)}`,
+  );
 }
 
 export async function getAuditEventsForEntity(
   entityType: string,
   entityId: string,
+  limit = 100,
+  offset = 0,
 ): Promise<AuditEventListResponse> {
   return apiGet<AuditEventListResponse>(
-    `/audit-events/by-entity/${entityType}/${entityId}`,
+    `/audit-events/by-entity/${entityType}/${entityId}?${buildAuditQuery(
+      limit,
+      offset,
+    )}`,
   );
 }
 
 export async function getAuditEventsForTenant(
   tenantId: string,
+  limit = 100,
+  offset = 0,
 ): Promise<AuditEventListResponse> {
-  return apiGet<AuditEventListResponse>(`/audit-events/by-tenant/${tenantId}`);
+  return apiGet<AuditEventListResponse>(
+    `/audit-events/by-tenant/${tenantId}?${buildAuditQuery(limit, offset)}`,
+  );
 }
