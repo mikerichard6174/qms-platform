@@ -38,8 +38,32 @@ class DocumentRepository:
         stmt = select(Document).where(Document.id == document_id)
         return db.scalar(stmt)
 
+    def get_by_tenant_and_id(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        document_id: uuid.UUID,
+    ) -> Document | None:
+        stmt = select(Document).where(
+            Document.tenant_id == tenant_id,
+            Document.id == document_id,
+        )
+        return db.scalar(stmt)
+
     def list_all(self, db: Session) -> list[Document]:
         stmt = select(Document).order_by(Document.created_at.desc())
+        return list(db.scalars(stmt).all())
+
+    def list_by_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+    ) -> list[Document]:
+        stmt = (
+            select(Document)
+            .where(Document.tenant_id == tenant_id)
+            .order_by(Document.created_at.desc())
+        )
         return list(db.scalars(stmt).all())
 
     def get_by_document_number(

@@ -62,6 +62,35 @@ class DocumentService:
             )
         return document
 
+    def get_document_for_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        document_id: uuid.UUID,
+    ) -> Document:
+        document = self.repository.get_by_tenant_and_id(
+            db=db,
+            tenant_id=tenant_id,
+            document_id=document_id,
+        )
+        if not document:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found for tenant.",
+            )
+        return document
+
     def list_documents(self, db: Session) -> tuple[list[Document], int]:
         items = self.repository.list_all(db=db)
+        return items, len(items)
+
+    def list_documents_for_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+    ) -> tuple[list[Document], int]:
+        items = self.repository.list_by_tenant(
+            db=db,
+            tenant_id=tenant_id,
+        )
         return items, len(items)

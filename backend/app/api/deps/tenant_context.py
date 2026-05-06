@@ -1,14 +1,16 @@
 import uuid
 
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+import app.models  # noqa: F401
+from app.api.deps.db import get_db
 from app.models.tenant import Tenant
 
 
 def require_tenant_id_header(
-    db: Session,
+    db: Session = Depends(get_db),
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
 ) -> uuid.UUID:
     if not x_tenant_id:

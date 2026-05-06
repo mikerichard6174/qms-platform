@@ -16,10 +16,16 @@ import type {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
-async function apiGet<T>(path: string): Promise<T> {
+const DEFAULT_TENANT_ID = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ?? "";
+
+async function apiGet<T>(
+  path: string,
+  headers?: Record<string, string>,
+): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
 
   const response = await fetch(url, {
+    headers,
     cache: "no-store",
   });
 
@@ -55,6 +61,22 @@ async function apiPost<T>(path: string, body?: unknown): Promise<T> {
 
 function buildAuditQuery(limit = 100, offset = 0): string {
   return `limit=${limit}&offset=${offset}`;
+}
+
+function buildTenantHeaders(tenantId: string): Record<string, string> {
+  return {
+    "X-Tenant-ID": tenantId,
+  };
+}
+
+function requireDefaultTenantId(): string {
+  if (!DEFAULT_TENANT_ID) {
+    throw new Error(
+      "NEXT_PUBLIC_DEFAULT_TENANT_ID is required for tenant-scoped audit requests.",
+    );
+  }
+
+  return DEFAULT_TENANT_ID;
 }
 
 export type CreateDocumentPayload = {
@@ -193,8 +215,11 @@ export async function getAuditEvents(
   limit = 100,
   offset = 0,
 ): Promise<AuditEventListResponse> {
+  const tenantId = requireDefaultTenantId();
+
   return apiGet<AuditEventListResponse>(
     `/audit-events?${buildAuditQuery(limit, offset)}`,
+    buildTenantHeaders(tenantId),
   );
 }
 
@@ -204,11 +229,14 @@ export async function getAuditEventsForEntity(
   limit = 100,
   offset = 0,
 ): Promise<AuditEventListResponse> {
+  const tenantId = requireDefaultTenantId();
+
   return apiGet<AuditEventListResponse>(
     `/audit-events/by-entity/${entityType}/${entityId}?${buildAuditQuery(
       limit,
       offset,
     )}`,
+    buildTenantHeaders(tenantId),
   );
 }
 
@@ -219,5 +247,6 @@ export async function getAuditEventsForTenant(
 ): Promise<AuditEventListResponse> {
   return apiGet<AuditEventListResponse>(
     `/audit-events/by-tenant/${tenantId}?${buildAuditQuery(limit, offset)}`,
+    buildTenantHeaders(tenantId),
   );
 }
