@@ -1,7 +1,26 @@
-import { AppShell } from "@/components/layout/AppShell";
-import { getAuditEvents, getAuditEventsForTenant } from "@/lib/api";
+"use client";
 
-const DEFAULT_TENANT_ID = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ?? "";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
+import { AppShell } from "@/components/layout/AppShell";
+import {
+  getAuditEventsForTenant,
+  getDocumentRevisions,
+  getDocuments,
+} from "@/lib/api";
+import type { AuditEventRecord } from "@/types/auditEvent";
+import type { DocumentRecord } from "@/types/document";
+import type { DocumentRevisionRecord } from "@/types/documentRevision";
+
+type AuditDisplayRecord = {
+  event: AuditEventRecord;
+  documentId: string | null;
+  documentNumber: string;
+  documentTitle: string;
+  revisionLabel: string | null;
+};
 
 function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -10,29 +29,186 @@ function formatDateTime(value: string): string {
   }).format(new Date(value));
 }
 
-function formatJson(value: Record<string, unknown> | null): string {
-  if (!value) {
-    return "None";
-  }
-
-  return JSON.stringify(value, null, 2);
+function formatAction(value: string): string {
+  return value.replaceAll("_", " ");
 }
 
-export default async function AuditEventsPage() {
-  let auditEvents: Awaited<ReturnType<typeof getAuditEvents>>["items"] = [];
-  let total = 0;
-  let errorMessage: string | null = null;
+function getEntityLabel(value: string): string {
+  if (value === "document") {
+    return "Document";
+  }
 
-  try {
-    const response = DEFAULT_TENANT_ID
-      ? await getAuditEventsForTenant(DEFAULT_TENANT_ID, 100, 0)
-      : await getAuditEvents(100, 0);
+  if (value === "document_revision") {
+    return "Revision";
+  }
 
-    auditEvents = response.items;
-    total = response.total;
-  } catch (error) {
-    console.error("Audit events page fetch failed:", error);
-    errorMessage = "Unable to load audit events from the backend.";
+  if (value === "document_approval") {
+    return "Approval";
+  }
+
+  return value;
+}
+
+function getActionBadgeClass(action: string): string {
+  if (action.includes("approved") || action.includes("effective")) {
+    return "bg-emerald-50 text-emerald-700";
+  }
+
+  if (action.includes("rejected") || action.includes("obsolete")) {
+    return "bg-red-50 text-red-700";
+  }
+
+  if (action.includes("submitted") || action.includes("assigned")) {
+    return "bg-blue-50 text-blue-700";
+  }
+
+  if (action.includes("created")) {
+    return "bg-slate-900 text-white";
+  }
+
+  return "bg-slate-100 text-slate-700";
+}
+
+function getStringMetadataValue(
+  metadata: Record<string, unknown> | null,
+  key: string,
+): string | null {
+  const value = metadata?.[key];
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return null;
+}
+
+function buildAuditDisplayRecords(
+  events: AuditEventRecord[],
+  documents: DocumentRecord[],
+  revisionsByDocument: Record<string, DocumentRevisionRecord[]>,
+): AuditDisplayRecord[] {
+  const documentsById = new Map<string, DocumentRecord>();
+  const revisionsById = new Map<string, DocumentRevisionRecord>();
+
+  documents.forEach((document) => {
+    documentsById.set(document.id, document);
+  });
+
+  Object.values(revisionsByDocument)
+    .flat()
+    .forEach((revision) => {
+      revisionsById.set(revision.id, revision);
+    });
+
+  return events.map((event) => {
+    let documentId: string | null = null;
+    let revisionLabel: string | null = null;
+
+    if (event.entity_type === "document") {
+      documentId = event.entity_id;
+    }
+
+    if (event.entity_type === "document_revision") {
+      const revision = revisionsById.get(event.entity_id);
+      documentId =
+        revision?.document_id ??
+        getStringMetadataValue(event.metadata_json, "document_id");
+      revisionLabel = revision?.revision_label ?? null;
+    }
+
+    if (event.entity_type === "document_approval") {
+      const revisionId =
+        getStringMetadataValue(event.metadata_json, "document_revision_id") ??
+        null;
+
+      if (revisionId) {
+        const revision = revisionsById.get(revisionId);
+        documentId =
+          revision?.document_id ??
+          getStringMetadataValue(event.metadata_json, "document_id");
+        revisionLabel = revision?.revision_label ?? null;
+      } else {
+        documentId = getStringMetadataValue(event.metadata_json, "document_id");
+      }
+    }
+
+    const document = documentId ? documentsById.get(documentId) : undefined;
+
+    return {
+      event,
+      documentId,
+      documentNumber: document?.document_number ?? "Unknown document",
+      documentTitle: document?.title ?? "Document details unavailable",
+      revisionLabel,
+    };
+  });
+}
+
+export default function AuditEventsPage() {
+  const router = useRouter();
+
+  const [auditRecords, setAuditRecords] = useState<AuditDisplayRecord[]>([]);
+  const [tenantName, setTenantName] = useState("Unknown tenant");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadAuditEvents() {
+      const tenantId = sessionStorage.getItem("tenant_id");
+      const userId = sessionStorage.getItem("user_id");
+
+      if (!tenantId || !userId) {
+        router.replace("/login");
+        return;
+      }
+
+      try {
+        const [auditResponse, documentResponse] = await Promise.all([
+          getAuditEventsForTenant(tenantId, 100, 0),
+          getDocuments(),
+        ]);
+
+        const revisionEntries = await Promise.all(
+          documentResponse.items.map(async (document) => {
+            try {
+              const revisions = await getDocumentRevisions(document.id);
+              return [document.id, revisions.items] as const;
+            } catch (error) {
+              console.error(
+                `Failed to fetch revisions for document ${document.id}:`,
+                error,
+              );
+              return [document.id, []] as const;
+            }
+          }),
+        );
+
+        const revisionsByDocument = Object.fromEntries(revisionEntries);
+
+        setAuditRecords(
+          buildAuditDisplayRecords(
+            auditResponse.items,
+            documentResponse.items,
+            revisionsByDocument,
+          ),
+        );
+        setTenantName(sessionStorage.getItem("tenant_name") ?? tenantId);
+      } catch (error) {
+        console.error("Audit events page fetch failed:", error);
+        router.replace("/login");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadAuditEvents();
+  }, [router]);
+
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-slate-950 p-8 text-white">
+        Loading audit trail...
+      </main>
+    );
   }
 
   return (
@@ -42,133 +218,118 @@ export default async function AuditEventsPage() {
           <p className="text-sm font-medium text-slate-500">
             Compliance Evidence
           </p>
+
           <h2 className="mt-1 text-3xl font-bold text-slate-950">
             Audit Trail
           </h2>
+
           <p className="mt-2 max-w-3xl text-sm text-slate-500">
-            Read-only event history for controlled document and revision
-            workflow actions.
+            Read-only event history tied back to controlled documents,
+            revisions, and approvals.
           </p>
         </div>
 
         <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
-          Showing: {total}
+          Tenant: {tenantName} | Events: {auditRecords.length}
         </div>
       </header>
 
-      {DEFAULT_TENANT_ID ? (
-        <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-          Tenant filter active: {DEFAULT_TENANT_ID}
-        </div>
-      ) : (
-        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          No default tenant ID is configured in the frontend environment. This
-          page is currently showing the global MVP audit event list.
-        </div>
-      )}
+      <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <div className="mb-4">
+          <h3 className="text-xl font-bold text-slate-950">
+            Recent Audit Events
+          </h3>
 
-      {errorMessage ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
-          {errorMessage}
+          <p className="mt-1 text-sm text-slate-500">
+            Newest events appear first. Each event links back to its controlled
+            document record when available.
+          </p>
         </div>
-      ) : (
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <div className="mb-4">
-            <h3 className="text-xl font-bold text-slate-950">
-              Recent Audit Events
-            </h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Newest events appear first. The table is intentionally read-only
-              to preserve audit evidence integrity.
-            </p>
-          </div>
 
-          <div className="overflow-hidden rounded-xl border border-slate-200">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead className="bg-slate-50 text-slate-600">
+        <div className="overflow-hidden rounded-xl border border-slate-200">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead className="bg-slate-50 text-slate-600">
+              <tr>
+                <th className="px-4 py-3 font-semibold">Date</th>
+                <th className="px-4 py-3 font-semibold">Document</th>
+                <th className="px-4 py-3 font-semibold">Event</th>
+                <th className="px-4 py-3 font-semibold">Summary</th>
+                <th className="px-4 py-3 font-semibold">Actor</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-slate-200 bg-white">
+              {auditRecords.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Date</th>
-                  <th className="px-4 py-3 font-semibold">Action</th>
-                  <th className="px-4 py-3 font-semibold">Entity</th>
-                  <th className="px-4 py-3 font-semibold">Summary</th>
-                  <th className="px-4 py-3 font-semibold">Changes</th>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-6 text-center text-slate-500"
+                  >
+                    No audit events found.
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {auditEvents.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-4 py-6 text-center text-slate-500"
-                    >
-                      No audit events found.
+              ) : (
+                auditRecords.map((record) => (
+                  <tr key={record.event.id} className="align-top">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+                      {formatDateTime(record.event.created_at)}
+                    </td>
+
+                    <td className="max-w-sm px-4 py-3">
+                      {record.documentId ? (
+                        <Link
+                          href={`/documents/${record.documentId}`}
+                          className="font-semibold text-slate-950 hover:underline"
+                        >
+                          {record.documentNumber}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold text-slate-950">
+                          {record.documentNumber}
+                        </span>
+                      )}
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        {record.documentTitle}
+                      </p>
+
+                      {record.revisionLabel ? (
+                        <p className="mt-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                          Revision {record.revisionLabel}
+                        </p>
+                      ) : null}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${getActionBadgeClass(
+                            record.event.action,
+                          )}`}
+                        >
+                          {formatAction(record.event.action)}
+                        </span>
+
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                          {getEntityLabel(record.event.entity_type)}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="max-w-xl px-4 py-3 text-slate-700">
+                      {record.event.summary}
+                    </td>
+
+                    <td className="px-4 py-3 text-xs text-slate-500">
+                      {record.event.actor_user_id ?? "System / Not assigned"}
                     </td>
                   </tr>
-                ) : (
-                  auditEvents.map((event) => (
-                    <tr key={event.id} className="align-top">
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-                        {formatDateTime(event.created_at)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                          {event.action}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        <div className="font-medium text-slate-950">
-                          {event.entity_type}
-                        </div>
-                        <div className="mt-1 break-all text-xs text-slate-500">
-                          {event.entity_id}
-                        </div>
-                      </td>
-                      <td className="max-w-md px-4 py-3 text-slate-700">
-                        {event.summary}
-                      </td>
-                      <td className="px-4 py-3">
-                        <details className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                          <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-                            View JSON
-                          </summary>
-                          <div className="mt-3 space-y-3">
-                            <div>
-                              <p className="mb-1 text-xs font-semibold text-slate-600">
-                                Old Values
-                              </p>
-                              <pre className="max-h-40 overflow-auto rounded bg-white p-3 text-xs text-slate-700">
-                                {formatJson(event.old_values_json)}
-                              </pre>
-                            </div>
-
-                            <div>
-                              <p className="mb-1 text-xs font-semibold text-slate-600">
-                                New Values
-                              </p>
-                              <pre className="max-h-40 overflow-auto rounded bg-white p-3 text-xs text-slate-700">
-                                {formatJson(event.new_values_json)}
-                              </pre>
-                            </div>
-
-                            <div>
-                              <p className="mb-1 text-xs font-semibold text-slate-600">
-                                Metadata
-                              </p>
-                              <pre className="max-h-40 overflow-auto rounded bg-white p-3 text-xs text-slate-700">
-                                {formatJson(event.metadata_json)}
-                              </pre>
-                            </div>
-                          </div>
-                        </details>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
     </AppShell>
   );
 }

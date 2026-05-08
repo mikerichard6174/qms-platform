@@ -41,10 +41,38 @@ class DocumentRevisionRepository:
         stmt = select(DocumentRevision).where(DocumentRevision.id == revision_id)
         return db.scalar(stmt)
 
+    def get_by_tenant_and_id(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        revision_id: uuid.UUID,
+    ) -> DocumentRevision | None:
+        stmt = select(DocumentRevision).where(
+            DocumentRevision.tenant_id == tenant_id,
+            DocumentRevision.id == revision_id,
+        )
+        return db.scalar(stmt)
+
     def list_by_document_id(self, db: Session, document_id: uuid.UUID) -> list[DocumentRevision]:
         stmt = (
             select(DocumentRevision)
             .where(DocumentRevision.document_id == document_id)
+            .order_by(DocumentRevision.created_at.desc())
+        )
+        return list(db.scalars(stmt).all())
+
+    def list_by_tenant_and_document_id(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        document_id: uuid.UUID,
+    ) -> list[DocumentRevision]:
+        stmt = (
+            select(DocumentRevision)
+            .where(
+                DocumentRevision.tenant_id == tenant_id,
+                DocumentRevision.document_id == document_id,
+            )
             .order_by(DocumentRevision.created_at.desc())
         )
         return list(db.scalars(stmt).all())
@@ -61,12 +89,39 @@ class DocumentRevisionRepository:
         )
         return db.scalar(stmt)
 
+    def get_by_tenant_document_and_label(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        document_id: uuid.UUID,
+        revision_label: str,
+    ) -> DocumentRevision | None:
+        stmt = select(DocumentRevision).where(
+            DocumentRevision.tenant_id == tenant_id,
+            DocumentRevision.document_id == document_id,
+            DocumentRevision.revision_label == revision_label,
+        )
+        return db.scalar(stmt)
+
     def get_effective_revision_for_document(
         self,
         db: Session,
         document_id: uuid.UUID,
     ) -> DocumentRevision | None:
         stmt = select(DocumentRevision).where(
+            DocumentRevision.document_id == document_id,
+            DocumentRevision.is_effective.is_(True),
+        )
+        return db.scalar(stmt)
+
+    def get_effective_revision_for_tenant_and_document(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        document_id: uuid.UUID,
+    ) -> DocumentRevision | None:
+        stmt = select(DocumentRevision).where(
+            DocumentRevision.tenant_id == tenant_id,
             DocumentRevision.document_id == document_id,
             DocumentRevision.is_effective.is_(True),
         )

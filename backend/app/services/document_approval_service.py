@@ -17,18 +17,63 @@ class DocumentApprovalService:
         self.revision_repository = DocumentRevisionRepository()
         self.audit_service = AuditEventService()
 
-    def create_approval(self, db: Session, data: DocumentApprovalCreate) -> DocumentApproval:
-        revision = self.revision_repository.get_by_id(db=db, revision_id=data.document_revision_id)
+    # -------------------------
+    # CREATE
+    # -------------------------
+
+    def create_approval(
+        self,
+        db: Session,
+        data: DocumentApprovalCreate,
+    ) -> DocumentApproval:
+        revision = self.revision_repository.get_by_id(
+            db=db,
+            revision_id=data.document_revision_id,
+        )
         if not revision:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Parent document revision not found.",
             )
 
-        existing_items = self.approval_repository.list_by_revision_id(
+        return self._create_core(db=db, data=data, actor_user_id=None)
+
+    def create_approval_for_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        data: DocumentApprovalCreate,
+    ) -> DocumentApproval:
+        revision = self.revision_repository.get_by_tenant_and_id(
             db=db,
+            tenant_id=tenant_id,
             revision_id=data.document_revision_id,
         )
+        if not revision:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parent document revision not found for tenant.",
+            )
+
+        return self._create_core(
+            db=db,
+            data=data,
+            actor_user_id=actor_user_id,
+        )
+
+    def _create_core(
+        self,
+        db: Session,
+        data: DocumentApprovalCreate,
+        actor_user_id: uuid.UUID | None,
+    ) -> DocumentApproval:
+        existing_items = self.approval_repository.list_by_tenant_and_revision_id(
+            db=db,
+            tenant_id=data.tenant_id,
+            revision_id=data.document_revision_id,
+        )
+
         for item in existing_items:
             if item.approver_user_id == data.approver_user_id:
                 raise HTTPException(
@@ -42,35 +87,60 @@ class DocumentApprovalService:
             db=db,
             data=AuditEventCreate(
                 tenant_id=approval.tenant_id,
-                actor_user_id=None,
+                actor_user_id=actor_user_id,
                 entity_type="document_approval",
                 entity_id=approval.id,
                 action="assigned",
-                summary=f"Approval was assigned for revision {revision.revision_label}.",
+                summary="Approval was assigned.",
                 old_values_json=None,
                 new_values_json={
                     "document_revision_id": str(approval.document_revision_id),
                     "approver_user_id": str(approval.approver_user_id),
-                    "approval_type": approval.approval_type,
                     "status": approval.status,
-                    "comment": approval.comment,
                 },
                 metadata_json={
-                    "source": "document_approval_service.create_approval",
-                    "document_id": str(revision.document_id),
-                    "revision_label": revision.revision_label,
+                    "source": "document_approval_service.create",
                 },
             ),
         )
 
         return approval
 
-    def get_approval(self, db: Session, approval_id: uuid.UUID) -> DocumentApproval:
-        approval = self.approval_repository.get_by_id(db=db, approval_id=approval_id)
+    # -------------------------
+    # READ
+    # -------------------------
+
+    def get_approval(
+        self,
+        db: Session,
+        approval_id: uuid.UUID,
+    ) -> DocumentApproval:
+        approval = self.approval_repository.get_by_id(
+            db=db,
+            approval_id=approval_id,
+        )
         if not approval:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Document approval not found.",
+            )
+        return approval
+
+    def get_approval_for_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        approval_id: uuid.UUID,
+    ) -> DocumentApproval:
+        approval = self.approval_repository.get_by_tenant_and_id(
+            db=db,
+            tenant_id=tenant_id,
+            approval_id=approval_id,
+        )
+        if not approval:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document approval not found for tenant.",
             )
         return approval
 
@@ -79,15 +149,28 @@ class DocumentApprovalService:
         db: Session,
         revision_id: uuid.UUID,
     ) -> tuple[list[DocumentApproval], int]:
-        revision = self.revision_repository.get_by_id(db=db, revision_id=revision_id)
-        if not revision:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Parent document revision not found.",
-            )
-
-        items = self.approval_repository.list_by_revision_id(db=db, revision_id=revision_id)
+        items = self.approval_repository.list_by_revision_id(
+            db=db,
+            revision_id=revision_id,
+        )
         return items, len(items)
+
+    def list_approvals_for_tenant_and_revision(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        revision_id: uuid.UUID,
+    ) -> tuple[list[DocumentApproval], int]:
+        items = self.approval_repository.list_by_tenant_and_revision_id(
+            db=db,
+            tenant_id=tenant_id,
+            revision_id=revision_id,
+        )
+        return items, len(items)
+
+    # -------------------------
+    # ACTIONS
+    # -------------------------
 
     def approve(
         self,
@@ -96,17 +179,44 @@ class DocumentApprovalService:
         comment: str | None = None,
     ) -> DocumentApproval:
         approval = self.get_approval(db=db, approval_id=approval_id)
+        return self._approve_core(db=db, approval=approval, user_id=approval.approver_user_id, comment=comment)
+
+    def approve_for_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        approval_id: uuid.UUID,
+        comment: str | None = None,
+    ) -> DocumentApproval:
+        approval = self.get_approval_for_tenant(
+            db=db,
+            tenant_id=tenant_id,
+            approval_id=approval_id,
+        )
+
+        if approval.approver_user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not the assigned approver.",
+            )
+
+        return self._approve_core(db=db, approval=approval, user_id=user_id, comment=comment)
+
+    def _approve_core(
+        self,
+        db: Session,
+        approval: DocumentApproval,
+        user_id: uuid.UUID,
+        comment: str | None,
+    ) -> DocumentApproval:
         if approval.status != "pending":
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Only pending approvals can be approved.",
             )
 
-        old_status = approval.status
-        old_comment = approval.comment
-        old_acted_at = approval.acted_at
-
-        updated_approval = self.approval_repository.mark_approved(
+        updated = self.approval_repository.mark_approved(
             db=db,
             approval=approval,
             comment=comment,
@@ -115,34 +225,21 @@ class DocumentApprovalService:
         self.audit_service.create_event(
             db=db,
             data=AuditEventCreate(
-                tenant_id=updated_approval.tenant_id,
-                actor_user_id=updated_approval.approver_user_id,
+                tenant_id=updated.tenant_id,
+                actor_user_id=user_id,
                 entity_type="document_approval",
-                entity_id=updated_approval.id,
+                entity_id=updated.id,
                 action="approved",
-                summary="Approval record was approved.",
-                old_values_json={
-                    "status": old_status,
-                    "comment": old_comment,
-                    "acted_at": old_acted_at.isoformat() if old_acted_at else None,
-                },
-                new_values_json={
-                    "status": updated_approval.status,
-                    "comment": updated_approval.comment,
-                    "acted_at": updated_approval.acted_at.isoformat()
-                    if updated_approval.acted_at
-                    else None,
-                },
-                metadata_json={
-                    "source": "document_approval_service.approve",
-                    "document_revision_id": str(updated_approval.document_revision_id),
-                },
+                summary="Approval approved.",
+                old_values_json={"status": "pending"},
+                new_values_json={"status": updated.status},
+                metadata_json={"source": "document_approval_service.approve"},
             ),
         )
 
-        self._evaluate_parent_revision(db=db, revision_id=updated_approval.document_revision_id)
+        self._evaluate_parent_revision(db=db, revision_id=updated.document_revision_id)
 
-        return updated_approval
+        return updated
 
     def reject(
         self,
@@ -151,17 +248,44 @@ class DocumentApprovalService:
         comment: str | None = None,
     ) -> DocumentApproval:
         approval = self.get_approval(db=db, approval_id=approval_id)
+        return self._reject_core(db=db, approval=approval, user_id=approval.approver_user_id, comment=comment)
+
+    def reject_for_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        approval_id: uuid.UUID,
+        comment: str | None = None,
+    ) -> DocumentApproval:
+        approval = self.get_approval_for_tenant(
+            db=db,
+            tenant_id=tenant_id,
+            approval_id=approval_id,
+        )
+
+        if approval.approver_user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not the assigned approver.",
+            )
+
+        return self._reject_core(db=db, approval=approval, user_id=user_id, comment=comment)
+
+    def _reject_core(
+        self,
+        db: Session,
+        approval: DocumentApproval,
+        user_id: uuid.UUID,
+        comment: str | None,
+    ) -> DocumentApproval:
         if approval.status != "pending":
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Only pending approvals can be rejected.",
             )
 
-        old_status = approval.status
-        old_comment = approval.comment
-        old_acted_at = approval.acted_at
-
-        updated_approval = self.approval_repository.mark_rejected(
+        updated = self.approval_repository.mark_rejected(
             db=db,
             approval=approval,
             comment=comment,
@@ -170,34 +294,21 @@ class DocumentApprovalService:
         self.audit_service.create_event(
             db=db,
             data=AuditEventCreate(
-                tenant_id=updated_approval.tenant_id,
-                actor_user_id=updated_approval.approver_user_id,
+                tenant_id=updated.tenant_id,
+                actor_user_id=user_id,
                 entity_type="document_approval",
-                entity_id=updated_approval.id,
+                entity_id=updated.id,
                 action="rejected",
-                summary="Approval record was rejected.",
-                old_values_json={
-                    "status": old_status,
-                    "comment": old_comment,
-                    "acted_at": old_acted_at.isoformat() if old_acted_at else None,
-                },
-                new_values_json={
-                    "status": updated_approval.status,
-                    "comment": updated_approval.comment,
-                    "acted_at": updated_approval.acted_at.isoformat()
-                    if updated_approval.acted_at
-                    else None,
-                },
-                metadata_json={
-                    "source": "document_approval_service.reject",
-                    "document_revision_id": str(updated_approval.document_revision_id),
-                },
+                summary="Approval rejected.",
+                old_values_json={"status": "pending"},
+                new_values_json={"status": updated.status},
+                metadata_json={"source": "document_approval_service.reject"},
             ),
         )
 
-        self._evaluate_parent_revision(db=db, revision_id=updated_approval.document_revision_id)
+        self._evaluate_parent_revision(db=db, revision_id=updated.document_revision_id)
 
-        return updated_approval
+        return updated
 
     def _evaluate_parent_revision(self, db: Session, revision_id: uuid.UUID) -> None:
         from app.services.document_revision_service import DocumentRevisionService

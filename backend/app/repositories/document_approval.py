@@ -31,10 +31,38 @@ class DocumentApprovalRepository:
         stmt = select(DocumentApproval).where(DocumentApproval.id == approval_id)
         return db.scalar(stmt)
 
+    def get_by_tenant_and_id(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        approval_id: uuid.UUID,
+    ) -> DocumentApproval | None:
+        stmt = select(DocumentApproval).where(
+            DocumentApproval.tenant_id == tenant_id,
+            DocumentApproval.id == approval_id,
+        )
+        return db.scalar(stmt)
+
     def list_by_revision_id(self, db: Session, revision_id: uuid.UUID) -> list[DocumentApproval]:
         stmt = (
             select(DocumentApproval)
             .where(DocumentApproval.document_revision_id == revision_id)
+            .order_by(DocumentApproval.created_at.asc())
+        )
+        return list(db.scalars(stmt).all())
+
+    def list_by_tenant_and_revision_id(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        revision_id: uuid.UUID,
+    ) -> list[DocumentApproval]:
+        stmt = (
+            select(DocumentApproval)
+            .where(
+                DocumentApproval.tenant_id == tenant_id,
+                DocumentApproval.document_revision_id == revision_id,
+            )
             .order_by(DocumentApproval.created_at.asc())
         )
         return list(db.scalars(stmt).all())

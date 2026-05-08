@@ -1,3 +1,4 @@
+import type { AuthSession } from "@/types/authSession";
 import type { AuditEventListResponse } from "@/types/auditEvent";
 import type { DashboardSummary } from "@/types/dashboard";
 import type {
@@ -16,67 +17,88 @@ import type {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
-const DEFAULT_TENANT_ID = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ?? "";
-
-async function apiGet<T>(
-  path: string,
-  headers?: Record<string, string>,
-): Promise<T> {
-  const url = `${API_BASE_URL}${path}`;
-
-  const response = await fetch(url, {
-    headers,
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Failed to fetch ${url}. Status: ${response.status}. Body: ${errorText}`,
-    );
+function getTenantId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
   }
 
-  return response.json();
+  return sessionStorage.getItem("tenant_id");
 }
 
-async function apiPost<T>(path: string, body?: unknown): Promise<T> {
-  const url = `${API_BASE_URL}${path}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Failed to post ${url}. Status: ${response.status}. Body: ${errorText}`,
-    );
+function getUserId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
   }
 
-  return response.json();
+  return sessionStorage.getItem("user_id");
+}
+
+function tenantHeaders(): Record<string, string> {
+  const tenantId = getTenantId();
+
+  if (!tenantId) {
+    throw new Error("Not logged in. Tenant is missing.");
+  }
+
+  return {
+    "X-Tenant-ID": tenantId,
+  };
+}
+
+function tenantUserHeaders(): Record<string, string> {
+  const tenantId = getTenantId();
+  const userId = getUserId();
+
+  if (!tenantId || !userId) {
+    throw new Error("Not logged in. Tenant or user is missing.");
+  }
+
+  return {
+    "X-Tenant-ID": tenantId,
+    "X-User-ID": userId,
+  };
 }
 
 function buildAuditQuery(limit = 100, offset = 0): string {
   return `limit=${limit}&offset=${offset}`;
 }
 
-function buildTenantHeaders(tenantId: string): Record<string, string> {
-  return {
-    "X-Tenant-ID": tenantId,
-  };
-}
+async function apiGet<T>(
+  path: string,
+  headers?: Record<string, string>,
+): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers,
+    cache: "no-store",
+  });
 
-function requireDefaultTenantId(): string {
-  if (!DEFAULT_TENANT_ID) {
-    throw new Error(
-      "NEXT_PUBLIC_DEFAULT_TENANT_ID is required for tenant-scoped audit requests.",
-    );
+  if (!response.ok) {
+    throw new Error(await response.text());
   }
 
-  return DEFAULT_TENANT_ID;
+  return response.json();
+}
+
+async function apiPost<T>(
+  path: string,
+  body?: unknown,
+  headers?: Record<string, string>,
+): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json();
 }
 
 export type CreateDocumentPayload = {
@@ -121,22 +143,32 @@ export type CreateApprovalPayload = {
   comment: string | null;
 };
 
+export async function getAuthSession(
+  tenantId: string,
+  userId: string,
+): Promise<AuthSession> {
+  return apiGet<AuthSession>("/auth/session", {
+    "X-Tenant-ID": tenantId,
+    "X-User-ID": userId,
+  });
+}
+
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   return apiGet<DashboardSummary>("/dashboard/summary");
 }
 
 export async function getDocuments(): Promise<DocumentListResponse> {
-  return apiGet<DocumentListResponse>("/documents");
+  return apiGet<DocumentListResponse>("/documents", tenantHeaders());
 }
 
-export async function getDocument(documentId: string): Promise<DocumentRecord> {
-  return apiGet<DocumentRecord>(`/documents/${documentId}`);
+export async function getDocument(id: string): Promise<DocumentRecord> {
+  return apiGet<DocumentRecord>(`/documents/${id}`, tenantHeaders());
 }
 
 export async function createDocument(
   payload: CreateDocumentPayload,
 ): Promise<DocumentRecord> {
-  return apiPost<DocumentRecord>("/documents", payload);
+  return apiPost<DocumentRecord>("/documents", payload, tenantUserHeaders());
 }
 
 export async function getDocumentRevisions(
@@ -144,27 +176,18 @@ export async function getDocumentRevisions(
 ): Promise<DocumentRevisionListResponse> {
   return apiGet<DocumentRevisionListResponse>(
     `/document-revisions/by-document/${documentId}`,
+    tenantHeaders(),
   );
 }
 
 export async function createDocumentRevision(
   payload: CreateRevisionPayload,
 ): Promise<DocumentRevisionRecord> {
-  return apiPost<DocumentRevisionRecord>("/document-revisions", payload);
-}
-
-export async function getDocumentApprovals(
-  revisionId: string,
-): Promise<DocumentApprovalListResponse> {
-  return apiGet<DocumentApprovalListResponse>(
-    `/document-approvals/by-revision/${revisionId}`,
+  return apiPost<DocumentRevisionRecord>(
+    "/document-revisions",
+    payload,
+    tenantUserHeaders(),
   );
-}
-
-export async function createDocumentApproval(
-  payload: CreateApprovalPayload,
-): Promise<DocumentApprovalRecord> {
-  return apiPost<DocumentApprovalRecord>("/document-approvals", payload);
 }
 
 export async function submitRevisionForReview(
@@ -172,6 +195,8 @@ export async function submitRevisionForReview(
 ): Promise<DocumentRevisionRecord> {
   return apiPost<DocumentRevisionRecord>(
     `/document-revisions/${revisionId}/submit-for-review`,
+    undefined,
+    tenantUserHeaders(),
   );
 }
 
@@ -180,6 +205,8 @@ export async function evaluateRevisionApprovalState(
 ): Promise<DocumentRevisionRecord> {
   return apiPost<DocumentRevisionRecord>(
     `/document-revisions/${revisionId}/evaluate-approval-state`,
+    undefined,
+    tenantUserHeaders(),
   );
 }
 
@@ -188,6 +215,27 @@ export async function makeRevisionEffective(
 ): Promise<DocumentRevisionRecord> {
   return apiPost<DocumentRevisionRecord>(
     `/document-revisions/${revisionId}/make-effective`,
+    undefined,
+    tenantUserHeaders(),
+  );
+}
+
+export async function getDocumentApprovals(
+  revisionId: string,
+): Promise<DocumentApprovalListResponse> {
+  return apiGet<DocumentApprovalListResponse>(
+    `/document-approvals/by-revision/${revisionId}`,
+    tenantHeaders(),
+  );
+}
+
+export async function createDocumentApproval(
+  payload: CreateApprovalPayload,
+): Promise<DocumentApprovalRecord> {
+  return apiPost<DocumentApprovalRecord>(
+    "/document-approvals",
+    payload,
+    tenantUserHeaders(),
   );
 }
 
@@ -198,6 +246,7 @@ export async function approveDocumentApproval(
   return apiPost<DocumentApprovalRecord>(
     `/document-approvals/${approvalId}/approve`,
     { comment },
+    tenantUserHeaders(),
   );
 }
 
@@ -208,6 +257,7 @@ export async function rejectDocumentApproval(
   return apiPost<DocumentApprovalRecord>(
     `/document-approvals/${approvalId}/reject`,
     { comment },
+    tenantUserHeaders(),
   );
 }
 
@@ -215,11 +265,9 @@ export async function getAuditEvents(
   limit = 100,
   offset = 0,
 ): Promise<AuditEventListResponse> {
-  const tenantId = requireDefaultTenantId();
-
   return apiGet<AuditEventListResponse>(
     `/audit-events?${buildAuditQuery(limit, offset)}`,
-    buildTenantHeaders(tenantId),
+    tenantHeaders(),
   );
 }
 
@@ -229,14 +277,12 @@ export async function getAuditEventsForEntity(
   limit = 100,
   offset = 0,
 ): Promise<AuditEventListResponse> {
-  const tenantId = requireDefaultTenantId();
-
   return apiGet<AuditEventListResponse>(
     `/audit-events/by-entity/${entityType}/${entityId}?${buildAuditQuery(
       limit,
       offset,
     )}`,
-    buildTenantHeaders(tenantId),
+    tenantHeaders(),
   );
 }
 
@@ -247,6 +293,6 @@ export async function getAuditEventsForTenant(
 ): Promise<AuditEventListResponse> {
   return apiGet<AuditEventListResponse>(
     `/audit-events/by-tenant/${tenantId}?${buildAuditQuery(limit, offset)}`,
-    buildTenantHeaders(tenantId),
+    tenantHeaders(),
   );
 }

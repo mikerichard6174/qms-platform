@@ -34,15 +34,20 @@ class DocumentRevisionService:
         self.audit_service = AuditEventService()
 
     def create_revision(self, db: Session, data: DocumentRevisionCreate) -> DocumentRevision:
-        document = self.document_repository.get_by_id(db=db, document_id=data.document_id)
+        document = self.document_repository.get_by_tenant_and_id(
+            db=db,
+            tenant_id=data.tenant_id,
+            document_id=data.document_id,
+        )
         if not document:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Parent document not found.",
+                detail="Parent document not found for tenant.",
             )
 
-        existing = self.revision_repository.get_by_document_and_label(
+        existing = self.revision_repository.get_by_tenant_document_and_label(
             db=db,
+            tenant_id=data.tenant_id,
             document_id=data.document_id,
             revision_label=data.revision_label,
         )
@@ -90,6 +95,24 @@ class DocumentRevisionService:
             )
         return revision
 
+    def get_revision_for_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        revision_id: uuid.UUID,
+    ) -> DocumentRevision:
+        revision = self.revision_repository.get_by_tenant_and_id(
+            db=db,
+            tenant_id=tenant_id,
+            revision_id=revision_id,
+        )
+        if not revision:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document revision not found for tenant.",
+            )
+        return revision
+
     def list_revisions_for_document(
         self,
         db: Session,
@@ -105,22 +128,68 @@ class DocumentRevisionService:
         items = self.revision_repository.list_by_document_id(db=db, document_id=document_id)
         return items, len(items)
 
+    def list_revisions_for_tenant_and_document(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        document_id: uuid.UUID,
+    ) -> tuple[list[DocumentRevision], int]:
+        document = self.document_repository.get_by_tenant_and_id(
+            db=db,
+            tenant_id=tenant_id,
+            document_id=document_id,
+        )
+        if not document:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parent document not found for tenant.",
+            )
+
+        items = self.revision_repository.list_by_tenant_and_document_id(
+            db=db,
+            tenant_id=tenant_id,
+            document_id=document_id,
+        )
+        return items, len(items)
+
     def submit_for_review(
         self,
         db: Session,
         revision_id: uuid.UUID,
     ) -> DocumentRevision:
         revision = self.get_revision(db=db, revision_id=revision_id)
+        return self._submit_for_review(db=db, revision=revision)
 
+    def submit_for_review_for_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        revision_id: uuid.UUID,
+    ) -> DocumentRevision:
+        revision = self.get_revision_for_tenant(
+            db=db,
+            tenant_id=tenant_id,
+            revision_id=revision_id,
+        )
+        revision.updated_by_user_id = user_id
+        return self._submit_for_review(db=db, revision=revision)
+
+    def _submit_for_review(
+        self,
+        db: Session,
+        revision: DocumentRevision,
+    ) -> DocumentRevision:
         if revision.status != "draft":
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Only draft revisions can be submitted for review.",
             )
 
-        approvals = self.approval_repository.list_by_revision_id(
+        approvals = self.approval_repository.list_by_tenant_and_revision_id(
             db=db,
-            revision_id=revision_id,
+            tenant_id=revision.tenant_id,
+            revision_id=revision.id,
         )
 
         if not approvals:
@@ -173,10 +242,32 @@ class DocumentRevisionService:
         revision_id: uuid.UUID,
     ) -> DocumentRevision:
         revision = self.get_revision(db=db, revision_id=revision_id)
+        return self._evaluate_approval_state(db=db, revision=revision)
 
-        approvals = self.approval_repository.list_by_revision_id(
+    def evaluate_approval_state_for_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        revision_id: uuid.UUID,
+    ) -> DocumentRevision:
+        revision = self.get_revision_for_tenant(
             db=db,
+            tenant_id=tenant_id,
             revision_id=revision_id,
+        )
+        revision.updated_by_user_id = user_id
+        return self._evaluate_approval_state(db=db, revision=revision)
+
+    def _evaluate_approval_state(
+        self,
+        db: Session,
+        revision: DocumentRevision,
+    ) -> DocumentRevision:
+        approvals = self.approval_repository.list_by_tenant_and_revision_id(
+            db=db,
+            tenant_id=revision.tenant_id,
+            revision_id=revision.id,
         )
 
         if not approvals:
@@ -241,26 +332,51 @@ class DocumentRevisionService:
         revision_id: uuid.UUID,
     ) -> DocumentRevision:
         revision = self.get_revision(db=db, revision_id=revision_id)
+        return self._make_effective(db=db, revision=revision)
 
+    def make_effective_for_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        revision_id: uuid.UUID,
+    ) -> DocumentRevision:
+        revision = self.get_revision_for_tenant(
+            db=db,
+            tenant_id=tenant_id,
+            revision_id=revision_id,
+        )
+        revision.updated_by_user_id = user_id
+        return self._make_effective(db=db, revision=revision)
+
+    def _make_effective(
+        self,
+        db: Session,
+        revision: DocumentRevision,
+    ) -> DocumentRevision:
         if revision.status != "approved":
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Only approved revisions can be made effective.",
             )
 
-        document = self.document_repository.get_by_id(
+        document = self.document_repository.get_by_tenant_and_id(
             db=db,
+            tenant_id=revision.tenant_id,
             document_id=revision.document_id,
         )
         if not document:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Parent document not found.",
+                detail="Parent document not found for tenant.",
             )
 
-        previous_effective_revision = self.revision_repository.get_effective_revision_for_document(
-            db=db,
-            document_id=revision.document_id,
+        previous_effective_revision = (
+            self.revision_repository.get_effective_revision_for_tenant_and_document(
+                db=db,
+                tenant_id=revision.tenant_id,
+                document_id=revision.document_id,
+            )
         )
 
         today = date.today()
@@ -279,6 +395,7 @@ class DocumentRevisionService:
             previous_effective_revision.is_current = False
             previous_effective_revision.is_effective = False
             previous_effective_revision.obsolete_date = today
+            previous_effective_revision.updated_by_user_id = revision.updated_by_user_id
             db.add(previous_effective_revision)
 
         old_revision_values = {
@@ -301,6 +418,7 @@ class DocumentRevisionService:
 
         document.status = "active"
         document.current_revision_id = revision.id
+        document.updated_by_user_id = revision.updated_by_user_id
 
         db.add(revision)
         db.add(document)

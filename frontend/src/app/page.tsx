@@ -1,37 +1,104 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { getDashboardSummary, getDocuments } from "@/lib/api";
+import type { DashboardSummary } from "@/types/dashboard";
+import type { DocumentRecord } from "@/types/document";
 
-export default async function Home() {
-  let documents: Awaited<ReturnType<typeof getDocuments>>["items"] = [];
-  let summary = {
+type SessionDisplay = {
+  tenantName: string;
+  userName: string;
+};
+
+export default function Home() {
+  const router = useRouter();
+
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary>({
     total_documents: 0,
     revisions_in_review: 0,
     effective_revisions: 0,
     pending_approvals: 0,
-  };
-  let backendStatus = "Connected";
-  let backendStatusClass =
-    "border-emerald-200 bg-emerald-50 text-emerald-700";
+  });
+  const [backendStatus, setBackendStatus] = useState("Connecting");
+  const [backendStatusClass, setBackendStatusClass] = useState(
+    "border-slate-200 bg-white text-slate-700",
+  );
+  const [sessionDisplay, setSessionDisplay] = useState<SessionDisplay>({
+    tenantName: "Unknown tenant",
+    userName: "Unknown user",
+  });
+  const [isLoading, setIsLoading] = useState(true);
 
-  try {
-    const [documentResponse, dashboardSummary] = await Promise.all([
-      getDocuments(),
-      getDashboardSummary(),
-    ]);
+  function handleLogout() {
+    sessionStorage.removeItem("tenant_id");
+    sessionStorage.removeItem("user_id");
+    sessionStorage.removeItem("tenant_name");
+    sessionStorage.removeItem("user_name");
+    sessionStorage.removeItem("user_roles");
 
-    documents = documentResponse.items;
-    summary = dashboardSummary;
-  } catch (error) {
-    console.error("Dashboard fetch failed:", error);
-    backendStatus = "Backend unavailable";
-    backendStatusClass = "border-red-200 bg-red-50 text-red-700";
+    localStorage.removeItem("tenant_id");
+    localStorage.removeItem("user_id");
+    localStorage.removeItem("tenant_name");
+    localStorage.removeItem("user_name");
+    localStorage.removeItem("user_roles");
+
+    router.push("/login");
+  }
+
+  useEffect(() => {
+    async function loadDashboard() {
+      const tenant = sessionStorage.getItem("tenant_id");
+      const user = sessionStorage.getItem("user_id");
+
+      if (!tenant || !user) {
+        router.replace("/login");
+        return;
+      }
+
+      try {
+        const [documentResponse, dashboardSummary] = await Promise.all([
+          getDocuments(),
+          getDashboardSummary(),
+        ]);
+
+        setSessionDisplay({
+          tenantName: sessionStorage.getItem("tenant_name") ?? tenant,
+          userName: sessionStorage.getItem("user_name") ?? user,
+        });
+        setDocuments(documentResponse.items);
+        setSummary(dashboardSummary);
+        setBackendStatus("Connected");
+        setBackendStatusClass(
+          "border-emerald-200 bg-emerald-50 text-emerald-700",
+        );
+      } catch (error) {
+        console.error("Dashboard fetch failed:", error);
+        router.replace("/login");
+        return;
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadDashboard();
+  }, [router]);
+
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-slate-950 p-8 text-white">
+        Loading session...
+      </main>
+    );
   }
 
   return (
     <AppShell activeNav="dashboard">
-      <header className="mb-8 flex items-center justify-between">
+      <header className="mb-8 flex items-center justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-slate-500">
             Document Control MVP
@@ -41,10 +108,25 @@ export default async function Home() {
           </h2>
         </div>
 
-        <div
-          className={`rounded-full border px-4 py-2 text-sm font-medium ${backendStatusClass}`}
-        >
-          Backend: {backendStatus}
+        <div className="flex items-center gap-3">
+          <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
+            User: {sessionDisplay.userName} | Tenant:{" "}
+            {sessionDisplay.tenantName}
+          </div>
+
+          <div
+            className={`rounded-full border px-4 py-2 text-sm font-medium ${backendStatusClass}`}
+          >
+            Backend: {backendStatus}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Log out
+          </button>
         </div>
       </header>
 

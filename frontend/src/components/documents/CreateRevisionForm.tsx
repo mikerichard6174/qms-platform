@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { createDocumentRevision } from "@/lib/api";
@@ -8,14 +7,14 @@ import { createDocumentRevision } from "@/lib/api";
 type CreateRevisionFormProps = {
   documentId: string;
   tenantId: string;
+  onChanged?: () => Promise<void> | void;
 };
 
 export function CreateRevisionForm({
   documentId,
   tenantId,
+  onChanged,
 }: CreateRevisionFormProps) {
-  const router = useRouter();
-
   const [revisionLabel, setRevisionLabel] = useState("");
   const [revisionNumber, setRevisionNumber] = useState("");
   const [changeSummary, setChangeSummary] = useState("");
@@ -23,8 +22,15 @@ export function CreateRevisionForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const canSubmit = revisionLabel.trim().length > 0 && !isSubmitting;
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!canSubmit) {
+      return;
+    }
+
     setIsSubmitting(true);
     setMessage(null);
 
@@ -32,11 +38,11 @@ export function CreateRevisionForm({
       await createDocumentRevision({
         document_id: documentId,
         tenant_id: tenantId,
-        revision_label: revisionLabel,
+        revision_label: revisionLabel.trim(),
         revision_number: revisionNumber ? Number(revisionNumber) : null,
-        change_summary: changeSummary || null,
+        change_summary: changeSummary.trim() || null,
         file_id: null,
-        external_file_url: externalFileUrl || null,
+        external_file_url: externalFileUrl.trim() || null,
         status: "draft",
         is_current: false,
         is_effective: false,
@@ -52,16 +58,22 @@ export function CreateRevisionForm({
       setChangeSummary("");
       setExternalFileUrl("");
       setMessage("Revision created successfully.");
-      router.refresh();
+
+      await onChanged?.();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Revision creation failed.");
+      setMessage(
+        error instanceof Error ? error.message : "Revision creation failed.",
+      );
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
+    <form
+      onSubmit={handleSubmit}
+      className="mt-8 rounded-2xl bg-white p-6 shadow-sm"
+    >
       <div className="mb-4">
         <h3 className="text-xl font-bold text-slate-950">Create Revision</h3>
         <p className="mt-1 text-sm text-slate-500">
@@ -109,7 +121,8 @@ export function CreateRevisionForm({
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
           <p className="mt-1 text-xs text-slate-500">
-            Use the SharePoint or external storage link for this specific revision.
+            Use the SharePoint or external storage link for this specific
+            revision.
           </p>
         </label>
 
@@ -130,7 +143,7 @@ export function CreateRevisionForm({
       <div className="mt-5 flex items-center gap-3">
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={!canSubmit}
           className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           {isSubmitting ? "Creating..." : "Create Revision"}

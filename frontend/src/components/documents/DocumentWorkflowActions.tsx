@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import {
@@ -15,19 +14,39 @@ import type { DocumentRevisionRecord } from "@/types/documentRevision";
 type DocumentWorkflowActionsProps = {
   revision: DocumentRevisionRecord;
   approvals: DocumentApprovalRecord[];
+  onChanged?: () => Promise<void> | void;
 };
 
 export function DocumentWorkflowActions({
   revision,
   approvals,
+  onChanged,
 }: DocumentWorkflowActionsProps) {
-  const router = useRouter();
   const [isWorking, setIsWorking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const pendingApprovals = approvals.filter(
     (approval) => approval.status === "pending",
   );
+
+  const approvedApprovals = approvals.filter(
+    (approval) => approval.status === "approved",
+  );
+
+  const rejectedApprovals = approvals.filter(
+    (approval) => approval.status === "rejected",
+  );
+
+  const canSubmitForReview =
+    revision.status === "draft" && approvals.length > 0 && !isWorking;
+
+  const canMakeEffective =
+    revision.status === "approved" &&
+    approvals.length > 0 &&
+    pendingApprovals.length === 0 &&
+    rejectedApprovals.length === 0 &&
+    !revision.is_effective &&
+    !isWorking;
 
   async function runAction(action: () => Promise<unknown>, successMessage: string) {
     setIsWorking(true);
@@ -36,7 +55,7 @@ export function DocumentWorkflowActions({
     try {
       await action();
       setMessage(successMessage);
-      router.refresh();
+      await onChanged?.();
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Workflow action failed.";
@@ -48,21 +67,27 @@ export function DocumentWorkflowActions({
 
   return (
     <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h5 className="text-sm font-semibold text-slate-950">
             Workflow Actions
           </h5>
+
           <p className="mt-1 text-xs text-slate-500">
-            Available actions are based on the current revision and approval state.
+            Actions unlock as the revision moves through draft, review,
+            approval, and effective states.
           </p>
+        </div>
+
+        <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          Approved {approvedApprovals.length} / {approvals.length}
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={isWorking || revision.status !== "draft"}
+          disabled={!canSubmitForReview}
           onClick={() =>
             runAction(
               () => submitRevisionForReview(revision.id),
@@ -76,7 +101,7 @@ export function DocumentWorkflowActions({
 
         <button
           type="button"
-          disabled={isWorking || revision.status !== "approved"}
+          disabled={!canMakeEffective}
           onClick={() =>
             runAction(
               () => makeRevisionEffective(revision.id),
@@ -87,6 +112,35 @@ export function DocumentWorkflowActions({
         >
           Make Effective
         </button>
+      </div>
+
+      <div className="mt-3 space-y-2 text-xs text-slate-500">
+        {revision.status === "draft" && approvals.length === 0 ? (
+          <p>Assign at least one approval before submitting for review.</p>
+        ) : null}
+
+        {revision.status === "draft" && approvals.length > 0 ? (
+          <p>This draft is ready to submit for review.</p>
+        ) : null}
+
+        {revision.status === "in_review" && pendingApprovals.length > 0 ? (
+          <p>
+            Waiting on {pendingApprovals.length} pending approval
+            {pendingApprovals.length === 1 ? "" : "s"}.
+          </p>
+        ) : null}
+
+        {revision.status === "approved" && !revision.is_effective ? (
+          <p>This revision is approved and ready to be made effective.</p>
+        ) : null}
+
+        {revision.is_effective ? (
+          <p>This revision is already effective.</p>
+        ) : null}
+
+        {rejectedApprovals.length > 0 ? (
+          <p>This revision has rejected approval records and cannot be made effective.</p>
+        ) : null}
       </div>
 
       {pendingApprovals.length > 0 ? (
@@ -105,6 +159,7 @@ export function DocumentWorkflowActions({
                   <p className="text-sm font-medium text-slate-950">
                     Approver: {approval.approver_user_id}
                   </p>
+
                   <p className="text-xs text-slate-500">
                     Type: {approval.approval_type}
                   </p>
@@ -113,7 +168,7 @@ export function DocumentWorkflowActions({
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    disabled={isWorking}
+                    disabled={isWorking || revision.status !== "in_review"}
                     onClick={() =>
                       runAction(
                         () =>
@@ -131,7 +186,7 @@ export function DocumentWorkflowActions({
 
                   <button
                     type="button"
-                    disabled={isWorking}
+                    disabled={isWorking || revision.status !== "in_review"}
                     onClick={() =>
                       runAction(
                         () =>
@@ -150,6 +205,13 @@ export function DocumentWorkflowActions({
               </div>
             ))}
           </div>
+
+          {revision.status !== "in_review" ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Approval decisions unlock after the revision is submitted for
+              review.
+            </p>
+          ) : null}
         </div>
       ) : (
         <p className="mt-4 text-sm text-slate-500">
