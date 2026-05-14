@@ -104,7 +104,7 @@ export default function Home() {
             Document Control MVP
           </p>
           <h2 className="mt-1 text-3xl font-bold text-slate-950">
-            QMS Dashboard
+            QMS Control Center
           </h2>
         </div>
 

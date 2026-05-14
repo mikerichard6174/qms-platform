@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 
 import { createDocument } from "@/lib/api";
+import type { DocumentRecord } from "@/types/document";
 
 type CreateDocumentFormProps = {
   onChanged?: () => Promise<void> | void;
@@ -16,11 +18,17 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
   const [reviewDueDate, setReviewDueDate] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdDocument, setCreatedDocument] = useState<DocumentRecord | null>(
+    null,
+  );
   const [message, setMessage] = useState<string | null>(null);
 
+  const trimmedDocumentNumber = documentNumber.trim();
+  const trimmedTitle = title.trim();
+
   const canSubmit =
-    documentNumber.trim().length > 0 &&
-    title.trim().length > 0 &&
+    trimmedDocumentNumber.length > 0 &&
+    trimmedTitle.length > 0 &&
     documentType.trim().length > 0 &&
     !isSubmitting;
 
@@ -40,13 +48,14 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
 
     setIsSubmitting(true);
     setMessage(null);
+    setCreatedDocument(null);
 
     try {
-      await createDocument({
+      const document = await createDocument({
         tenant_id: tenantId,
         program_id: null,
-        document_number: documentNumber.trim(),
-        title: title.trim(),
+        document_number: trimmedDocumentNumber.toUpperCase(),
+        title: trimmedTitle,
         document_type: documentType,
         owner_user_id: null,
         status: "draft",
@@ -63,6 +72,7 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
       setIsControlled(true);
       setReviewDueDate("");
       setIsExpanded(false);
+      setCreatedDocument(document);
       setMessage("Document created successfully.");
 
       await onChanged?.();
@@ -84,25 +94,58 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
           </h3>
 
           <p className="mt-1 text-sm text-slate-500">
-            Add a new document master record before creating revisions.
+            Create the document master record first, then add revision evidence
+            from the document workspace.
           </p>
         </div>
 
         <button
           type="button"
-          onClick={() => setIsExpanded((current) => !current)}
+          onClick={() => {
+            setIsExpanded((current) => !current);
+            setMessage(null);
+            setCreatedDocument(null);
+          }}
           className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
           {isExpanded ? "Close Form" : "New Document"}
         </button>
       </div>
 
+      {createdDocument ? (
+        <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-sm font-semibold text-emerald-800">
+            Document created: {createdDocument.document_number}
+          </p>
+
+          <p className="mt-1 text-sm text-emerald-700">
+            Open the document workspace to add revisions, approvals, and audit
+            evidence.
+          </p>
+
+          <Link
+            href={`/documents/${createdDocument.id}`}
+            className="mt-3 inline-flex rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600"
+          >
+            Open Document Workspace
+          </Link>
+        </div>
+      ) : null}
+
       {isExpanded ? (
         <form onSubmit={handleSubmit} className="mt-6">
+          <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+            <p className="font-semibold">Document control guidance</p>
+            <p className="mt-1">
+              Use a consistent document number such as QMS-001, PROC-001, or
+              WI-001. The system will store the number in uppercase.
+            </p>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
               <span className="text-sm font-medium text-slate-700">
-                Document Number
+                Document Number <span className="text-red-600">*</span>
               </span>
 
               <input
@@ -110,12 +153,18 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
                 onChange={(event) => setDocumentNumber(event.target.value)}
                 required
                 placeholder="QMS-002"
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase"
               />
+
+              <p className="mt-1 text-xs text-slate-500">
+                Required. Must be unique within the tenant.
+              </p>
             </label>
 
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Type</span>
+              <span className="text-sm font-medium text-slate-700">
+                Type <span className="text-red-600">*</span>
+              </span>
 
               <select
                 value={documentType}
@@ -131,7 +180,9 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
             </label>
 
             <label className="block md:col-span-2">
-              <span className="text-sm font-medium text-slate-700">Title</span>
+              <span className="text-sm font-medium text-slate-700">
+                Title <span className="text-red-600">*</span>
+              </span>
 
               <input
                 value={title}
@@ -140,6 +191,10 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
                 placeholder="Example Procedure"
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
+
+              <p className="mt-1 text-xs text-slate-500">
+                Use the controlled document title, not the file name.
+              </p>
             </label>
 
             <label className="block">
@@ -153,6 +208,10 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
                 type="date"
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
+
+              <p className="mt-1 text-xs text-slate-500">
+                Optional. This can be used later for periodic review tracking.
+              </p>
             </label>
 
             <label className="flex items-center gap-2 pt-6 text-sm font-medium text-slate-700">
@@ -165,7 +224,7 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
             </label>
           </div>
 
-          <div className="mt-5 flex items-center gap-3">
+          <div className="mt-5 flex flex-wrap items-center gap-3">
             <button
               type="submit"
               disabled={!canSubmit}
@@ -174,12 +233,28 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
               {isSubmitting ? "Creating..." : "Create Document"}
             </button>
 
+            <button
+              type="button"
+              onClick={() => {
+                setDocumentNumber("");
+                setTitle("");
+                setDocumentType("procedure");
+                setIsControlled(true);
+                setReviewDueDate("");
+                setMessage(null);
+              }}
+              disabled={isSubmitting}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+            >
+              Clear
+            </button>
+
             {message ? (
               <p className="text-sm text-slate-600">{message}</p>
             ) : null}
           </div>
         </form>
-      ) : message ? (
+      ) : message && !createdDocument ? (
         <p className="mt-4 text-sm text-slate-600">{message}</p>
       ) : null}
     </section>

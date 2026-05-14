@@ -5,11 +5,15 @@ import { use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AuditEvidenceSummary } from "@/components/documents/AuditEvidenceSummary";
+import { ApprovalStatusBadge } from "@/components/documents/ApprovalStatusBadge";
+import { ApprovalReadinessIndicator } from "@/components/documents/ApprovalReadinessIndicator";
 import { AuditEventTimeline } from "@/components/documents/AuditEventTimeline";
 import { CreateApprovalForm } from "@/components/documents/CreateApprovalForm";
 import { CreateRevisionForm } from "@/components/documents/CreateRevisionForm";
 import { DocumentQuickActions } from "@/components/documents/DocumentQuickActions";
 import { DocumentWorkflowActions } from "@/components/documents/DocumentWorkflowActions";
+import { ReviewerActionPanel } from "@/components/documents/ReviewerActionPanel";
+import { RevisionWorkflowGuidance } from "@/components/documents/RevisionWorkflowGuidance";
 import { AppShell } from "@/components/layout/AppShell";
 import {
   getAuditEventsForEntity,
@@ -225,9 +229,7 @@ export default function DocumentDetailPage({
     try {
       const documentRecord = await getDocument(resolvedParams.id);
 
-      const revisionResponse = await getDocumentRevisions(
-        resolvedParams.id,
-      );
+      const revisionResponse = await getDocumentRevisions(resolvedParams.id);
 
       const revisionRecords = revisionResponse.items;
 
@@ -264,9 +266,9 @@ export default function DocumentDetailPage({
   }
 
   useEffect(() => {
-  const timeoutId = window.setTimeout(() => void loadDocumentWorkspace(), 0);
-  return () => window.clearTimeout(timeoutId);
-}, [loadDocumentWorkspace]);
+    const timeoutId = window.setTimeout(() => void loadDocumentWorkspace(), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [loadDocumentWorkspace]);
 
   if (isLoading) {
     return (
@@ -396,6 +398,11 @@ export default function DocumentDetailPage({
               </div>
             </div>
           </section>
+
+          <ReviewerActionPanel
+            revisions={revisions}
+            approvalsByRevision={approvalsByRevision}
+          />
 
           <section className="mt-8 grid gap-6 lg:grid-cols-4">
             <div className="rounded-2xl bg-white p-6 shadow-sm">
@@ -565,6 +572,8 @@ export default function DocumentDetailPage({
                     </div>
                   </div>
 
+                  <RevisionWorkflowGuidance revision={revision} approvals={approvals} />
+
                   <details className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <summary className="cursor-pointer text-sm font-semibold text-slate-950">
                       View approval records
@@ -592,6 +601,10 @@ export default function DocumentDetailPage({
                               </th>
 
                               <th className="px-3 py-2 font-semibold">
+                                Readiness
+                              </th>
+
+                              <th className="px-3 py-2 font-semibold">
                                 Acted At
                               </th>
 
@@ -613,7 +626,14 @@ export default function DocumentDetailPage({
                                 </td>
 
                                 <td className="px-3 py-2">
-                                  <StatusBadge status={approval.status} />
+                                  <ApprovalStatusBadge status={approval.status} />
+                                </td>
+
+                                <td className="px-3 py-2">
+                                  <ApprovalReadinessIndicator
+                                    revision={revision}
+                                    approval={approval}
+                                  />
                                 </td>
 
                                 <td className="px-3 py-2 text-slate-500">
@@ -635,9 +655,7 @@ export default function DocumentDetailPage({
                       tenantId={revision.tenant_id}
                       revisionStatus={revision.status}
                       existingApprovalCount={approvals.length}
-                      defaultApproverUserId={
-                        DEFAULT_APPROVER_USER_ID
-                      }
+                      defaultApproverUserId={DEFAULT_APPROVER_USER_ID}
                       onChanged={loadDocumentWorkspace}
                     />
                   </details>

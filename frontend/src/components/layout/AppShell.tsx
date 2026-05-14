@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 type AppShellProps = {
@@ -25,7 +28,13 @@ function disabledNavClass(): string {
   return "block rounded-lg px-4 py-3 text-sm font-medium text-slate-400";
 }
 
-export function AppShell({ children, activeNav = "dashboard" }: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
+  const pathname = usePathname();
+
+  const isDashboardActive = pathname === "/";
+  const isDocumentsActive = pathname.startsWith("/documents");
+  const isAuditEventsActive = pathname.startsWith("/audit-events");
+
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
       <div className="flex min-h-screen">
@@ -34,21 +43,22 @@ export function AppShell({ children, activeNav = "dashboard" }: AppShellProps) {
             <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
               QMS Platform
             </p>
+
             <h1 className="mt-2 text-2xl font-bold text-slate-950">
               Quality Control Hub
             </h1>
           </div>
 
           <nav className="space-y-2">
-            <Link href="/" className={navClass(activeNav === "dashboard")}>
-              Dashboard
+            <Link href="/" className={navClass(isDashboardActive)}>
+              Control Center
             </Link>
 
             <Link
               href="/documents"
-              className={navClass(activeNav === "documents")}
+              className={navClass(isDocumentsActive)}
             >
-              Documents
+              Document Register
             </Link>
 
             <a className={disabledNavClass()}>Revisions</a>
@@ -56,7 +66,7 @@ export function AppShell({ children, activeNav = "dashboard" }: AppShellProps) {
 
             <Link
               href="/audit-events"
-              className={navClass(activeNav === "audit-events")}
+              className={navClass(isAuditEventsActive)}
             >
               Audit Trail
             </Link>
