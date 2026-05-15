@@ -4,146 +4,95 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { CreateDocumentForm } from "@/components/documents/CreateDocumentForm";
 import { AppShell } from "@/components/layout/AppShell";
-import {
-  getDashboardSummary,
-  getDocumentApprovals,
-  getDocumentRevisions,
-  getDocuments,
-} from "@/lib/api";
-import type { DashboardSummary } from "@/types/dashboard";
+import { getDocuments } from "@/lib/api";
 import type { DocumentRecord } from "@/types/document";
-import type { DocumentApprovalRecord } from "@/types/documentApproval";
-import type { DocumentRevisionRecord } from "@/types/documentRevision";
 
-type SessionDisplay = {
-  tenantName: string;
-  userName: string;
-};
+type ControlledFilter = "all" | "controlled" | "uncontrolled";
 
-type MyReviewAction = {
-  document: DocumentRecord;
-  revision: DocumentRevisionRecord;
-  approval: DocumentApprovalRecord;
-};
+type SortKey =
+  | "document_number"
+  | "title"
+  | "document_type"
+  | "status"
+  | "is_controlled"
+  | "review_due_date";
 
-async function getMyReviewActions(
-  documents: DocumentRecord[],
-  userId: string,
-): Promise<MyReviewAction[]> {
-  const actionGroups = await Promise.all(
-    documents.map(async (document) => {
-      try {
-        const revisionResponse = await getDocumentRevisions(document.id);
+type SortDirection = "asc" | "desc";
 
-        const approvalGroups = await Promise.all(
-          revisionResponse.items.map(async (revision) => {
-            try {
-              const approvalResponse = await getDocumentApprovals(revision.id);
-
-              return approvalResponse.items
-                .filter(
-                  (approval) =>
-                    approval.status === "pending" &&
-                    approval.approver_user_id === userId &&
-                    revision.status === "in_review",
-                )
-                .map((approval) => ({
-                  document,
-                  revision,
-                  approval,
-                }));
-            } catch (error) {
-              console.error(
-                `Failed to load approvals for revision ${revision.id}:`,
-                error,
-              );
-
-              return [];
-            }
-          }),
-        );
-
-        return approvalGroups.flat();
-      } catch (error) {
-        console.error(
-          `Failed to load revisions for document ${document.id}:`,
-          error,
-        );
-
-        return [];
-      }
-    }),
-  );
-
-  return actionGroups.flat();
+function normalize(value: string): string {
+  return value.trim().toLowerCase();
 }
 
-function isOverdue(dateValue: string | null): boolean {
-  if (!dateValue) {
-    return false;
+function formatDate(value: string | null): string {
+  if (!value) {
+    return "Not set";
+  }
+
+  return new Date(value).toLocaleDateString();
+}
+
+function getReviewDueClass(value: string | null): string {
+  if (!value) {
+    return "text-slate-500";
   }
 
   const today = new Date();
-  const reviewDate = new Date(dateValue);
+  const dueDate = new Date(value);
 
   today.setHours(0, 0, 0, 0);
-  reviewDate.setHours(0, 0, 0, 0);
+  dueDate.setHours(0, 0, 0, 0);
 
-  return reviewDate < today;
-}
-
-function isDueSoon(dateValue: string | null): boolean {
-  if (!dateValue) {
-    return false;
+  if (dueDate < today) {
+    return "font-semibold text-red-700";
   }
 
-  const today = new Date();
-  const reviewDate = new Date(dateValue);
+  const thirtyDaysFromNow = new Date(today);
+  thirtyDaysFromNow.setDate(today.getDate() + 30);
 
-  today.setHours(0, 0, 0, 0);
-  reviewDate.setHours(0, 0, 0, 0);
+  if (dueDate <= thirtyDaysFromNow) {
+    return "font-semibold text-amber-700";
+  }
 
-  const threshold = new Date(today);
-  threshold.setDate(today.getDate() + 30);
-
-  return reviewDate >= today && reviewDate <= threshold;
+  return "text-slate-700";
 }
 
-export default function Home() {
+function compareValues(
+  a: DocumentRecord,
+  b: DocumentRecord,
+  sortKey: SortKey,
+): number {
+  if (sortKey === "is_controlled") {
+    return Number(a.is_controlled) - Number(b.is_controlled);
+  }
+
+  if (sortKey === "review_due_date") {
+    const aValue = a.review_due_date ?? "";
+    const bValue = b.review_due_date ?? "";
+
+    return aValue.localeCompare(bValue);
+  }
+
+  return String(a[sortKey] ?? "").localeCompare(String(b[sortKey] ?? ""));
+}
+
+export default function DocumentsPage() {
   const router = useRouter();
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
-  const [myReviewActions, setMyReviewActions] = useState<MyReviewAction[]>([]);
-  const [summary, setSummary] = useState<DashboardSummary>({
-    total_documents: 0,
-    revisions_in_review: 0,
-    effective_revisions: 0,
-    pending_approvals: 0,
-  });
-  const [backendStatus, setBackendStatus] = useState("Connecting");
-  const [backendStatusClass, setBackendStatusClass] = useState(
-    "border-slate-200 bg-white text-slate-700",
-  );
-  const [sessionDisplay, setSessionDisplay] = useState<SessionDisplay>({
-    tenantName: "Unknown tenant",
-    userName: "Unknown user",
-  });
+  const [tenantName, setTenantName] = useState("Unknown tenant");
   const [isLoading, setIsLoading] = useState(true);
 
-  const overdueDocuments = useMemo(() => {
-    return documents.filter((document) =>
-      isOverdue(document.review_due_date),
-    );
-  }, [documents]);
+  const [searchText, setSearchText] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [controlledFilter, setControlledFilter] =
+    useState<ControlledFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("document_number");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
-  const dueSoonDocuments = useMemo(() => {
-    return documents.filter((document) =>
-      isDueSoon(document.review_due_date),
-    );
-  }, [documents]);
-
-  const loadDashboard = useCallback(async () => {
+  const loadDocuments = useCallback(async () => {
     const tenant = sessionStorage.getItem("tenant_id");
     const user = sessionStorage.getItem("user_id");
 
@@ -153,271 +102,305 @@ export default function Home() {
     }
 
     try {
-      const [documentResponse, dashboardSummary] = await Promise.all([
-        getDocuments(),
-        getDashboardSummary(),
-      ]);
-
-      const reviewActions = await getMyReviewActions(
-        documentResponse.items,
-        user,
-      );
-
-      setSessionDisplay({
-        tenantName: sessionStorage.getItem("tenant_name") ?? tenant,
-        userName: sessionStorage.getItem("user_name") ?? user,
-      });
-
-      setDocuments(documentResponse.items);
-      setMyReviewActions(reviewActions);
-      setSummary(dashboardSummary);
-
-      setBackendStatus("Connected");
-      setBackendStatusClass(
-        "border-emerald-200 bg-emerald-50 text-emerald-700",
-      );
+      const response = await getDocuments();
+      setDocuments(response.items);
+      setTenantName(sessionStorage.getItem("tenant_name") ?? tenant);
     } catch (error) {
-      console.error("Dashboard fetch failed:", error);
+      console.error("Documents page fetch failed:", error);
       router.replace("/login");
-      return;
     } finally {
       setIsLoading(false);
     }
   }, [router]);
 
-  function handleLogout() {
-    sessionStorage.clear();
-    localStorage.clear();
-    router.push("/login");
+  const statusOptions = useMemo(() => {
+    return Array.from(new Set(documents.map((document) => document.status)))
+      .filter(Boolean)
+      .sort();
+  }, [documents]);
+
+  const typeOptions = useMemo(() => {
+    return Array.from(
+      new Set(documents.map((document) => document.document_type)),
+    )
+      .filter(Boolean)
+      .sort();
+  }, [documents]);
+
+  const filteredDocuments = useMemo(() => {
+    const query = normalize(searchText);
+
+    const filtered = documents.filter((document) => {
+      const matchesSearch =
+        query.length === 0 ||
+        normalize(document.document_number).includes(query) ||
+        normalize(document.title).includes(query) ||
+        normalize(document.document_type).includes(query) ||
+        normalize(document.status).includes(query);
+
+      const matchesStatus =
+        statusFilter === "all" || document.status === statusFilter;
+
+      const matchesType =
+        typeFilter === "all" || document.document_type === typeFilter;
+
+      const matchesControlled =
+        controlledFilter === "all" ||
+        (controlledFilter === "controlled" && document.is_controlled) ||
+        (controlledFilter === "uncontrolled" && !document.is_controlled);
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesType &&
+        matchesControlled
+      );
+    });
+
+    return filtered.sort((a, b) => {
+      const result = compareValues(a, b, sortKey);
+      return sortDirection === "asc" ? result : result * -1;
+    });
+  }, [
+    controlledFilter,
+    documents,
+    searchText,
+    sortDirection,
+    sortKey,
+    statusFilter,
+    typeFilter,
+  ]);
+
+  function clearFilters() {
+    setSearchText("");
+    setStatusFilter("all");
+    setTypeFilter("all");
+    setControlledFilter("all");
+    setSortKey("document_number");
+    setSortDirection("asc");
+  }
+
+  function updateSort(nextSortKey: SortKey) {
+    if (sortKey === nextSortKey) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(nextSortKey);
+    setSortDirection("asc");
+  }
+
+  function sortLabel(column: SortKey): string {
+    if (sortKey !== column) {
+      return "";
+    }
+
+    return sortDirection === "asc" ? " ↑" : " ↓";
   }
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => void loadDashboard(), 0);
+    const timeoutId = window.setTimeout(() => void loadDocuments(), 0);
     return () => window.clearTimeout(timeoutId);
-  }, [loadDashboard]);
+  }, [loadDocuments]);
 
   if (isLoading) {
     return (
       <main className="min-h-screen bg-slate-950 p-8 text-white">
-        Loading session...
+        Loading documents...
       </main>
     );
   }
 
   return (
-    <AppShell activeNav="dashboard">
+    <AppShell activeNav="documents">
       <header className="mb-8 flex items-center justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-slate-500">
-            Document Control MVP
+            Document Control
           </p>
 
           <h2 className="mt-1 text-3xl font-bold text-slate-950">
             Document Register
           </h2>
+
+          <p className="mt-2 text-sm text-slate-500">Tenant: {tenantName}</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
-            User: {sessionDisplay.userName} | Tenant:{" "}
-            {sessionDisplay.tenantName}
-          </div>
+        <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
+          Showing {filteredDocuments.length} of {documents.length}
+        </div>
+      </header>
 
-          <div
-            className={`rounded-full border px-4 py-2 text-sm font-medium ${backendStatusClass}`}
-          >
-            Backend: {backendStatus}
+      <CreateDocumentForm onChanged={loadDocuments} />
+
+      <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-bold text-slate-950">
+              Document Register
+            </h3>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Search, filter, and sort controlled document master records.
+            </p>
           </div>
 
           <button
             type="button"
-            onClick={handleLogout}
-            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={clearFilters}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
-            Log out
+            Clear filters
           </button>
         </div>
-      </header>
 
-      <div className="grid gap-6 md:grid-cols-6">
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">
-            Document Register
-          </p>
+        <div className="mb-5 grid gap-4 lg:grid-cols-4">
+          <label className="block lg:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Search</span>
 
-          <p className="mt-3 text-4xl font-bold text-slate-950">
-            {summary.total_documents}
-          </p>
+            <input
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search document number, title, type, or status"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Status</span>
+
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="all">All statuses</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Type</span>
+
+            <select
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="all">All types</option>
+              {typeOptions.map((documentType) => (
+                <option key={documentType} value={documentType}>
+                  {documentType}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">
-            Revisions in Review
-          </p>
+        <div className="mb-5 max-w-xs">
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">
+              Control Type
+            </span>
 
-          <p className="mt-3 text-4xl font-bold text-slate-950">
-            {summary.revisions_in_review}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">
-            Effective Revisions
-          </p>
-
-          <p className="mt-3 text-4xl font-bold text-slate-950">
-            {summary.effective_revisions}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">
-            My Review Actions
-          </p>
-
-          <p className="mt-3 text-4xl font-bold text-slate-950">
-            {myReviewActions.length}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-          <p className="text-sm font-medium text-amber-700">
-            Reviews Due Soon
-          </p>
-
-          <p className="mt-3 text-4xl font-bold text-amber-900">
-            {dueSoonDocuments.length}
-          </p>
-
-          <p className="mt-2 text-sm text-amber-800">
-            Reviews due within 30 days.
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 shadow-sm">
-          <p className="text-sm font-medium text-red-700">
-            Overdue Reviews
-          </p>
-
-          <p className="mt-3 text-4xl font-bold text-red-900">
-            {overdueDocuments.length}
-          </p>
-
-          <p className="mt-2 text-sm text-red-800">
-            Controlled documents past review date.
-          </p>
-        </div>
-      </div>
-
-      <section className="mt-8 rounded-2xl border border-blue-200 bg-blue-50 p-6 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-blue-700">
-              Reviewer Workflow
-            </p>
-
-            <h3 className="mt-1 text-xl font-bold text-slate-950">
-              My Review Actions
-            </h3>
-
-            <p className="mt-1 text-sm text-blue-800">
-              These revisions are currently in review and waiting on your
-              approval decision.
-            </p>
-          </div>
-
-          <div className="rounded-full border border-blue-200 bg-white px-4 py-2 text-sm font-medium text-blue-700">
-            Open actions: {myReviewActions.length}
-          </div>
-        </div>
-
-        {myReviewActions.length === 0 ? (
-          <div className="rounded-xl border border-blue-200 bg-white p-4 text-sm text-slate-600">
-            No review actions are currently assigned to you.
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {myReviewActions.map((action) => (
-              <Link
-                key={action.approval.id}
-                href={`/documents/${action.document.id}#revision-${action.revision.id}`}
-                className="block rounded-xl border border-blue-200 bg-white p-4 hover:bg-slate-50"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-500">
-                      {action.document.document_number}
-                    </p>
-
-                    <p className="mt-1 text-lg font-bold text-slate-950">
-                      {action.document.title}
-                    </p>
-
-                    <p className="mt-2 text-sm text-slate-600">
-                      Revision {action.revision.revision_label}:{" "}
-                      {action.revision.change_summary ??
-                        "No change summary provided."}
-                    </p>
-                  </div>
-
-                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
-                    Action Required
-                  </span>
-                </div>
-
-                <p className="mt-4 text-xs font-medium text-blue-700">
-                  Open document workflow →
-                </p>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-bold text-slate-950">
-              Recent Controlled Documents
-            </h3>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Live document data pulled from your FastAPI backend.
-            </p>
-          </div>
-
-          <Link
-            href="/documents"
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-          >
-            View all documents
-          </Link>
+            <select
+              value={controlledFilter}
+              onChange={(event) =>
+                setControlledFilter(event.target.value as ControlledFilter)
+              }
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="all">All documents</option>
+              <option value="controlled">Controlled only</option>
+              <option value="uncontrolled">Uncontrolled only</option>
+            </select>
+          </label>
         </div>
 
         <div className="overflow-hidden rounded-xl border border-slate-200">
           <table className="w-full border-collapse text-left text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
-                <th className="px-4 py-3 font-semibold">Document #</th>
-                <th className="px-4 py-3 font-semibold">Title</th>
-                <th className="px-4 py-3 font-semibold">Type</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 font-semibold">Review Due</th>
+                <th className="px-4 py-3 font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => updateSort("document_number")}
+                    className="font-semibold hover:underline"
+                  >
+                    Document #{sortLabel("document_number")}
+                  </button>
+                </th>
+
+                <th className="px-4 py-3 font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => updateSort("title")}
+                    className="font-semibold hover:underline"
+                  >
+                    Title{sortLabel("title")}
+                  </button>
+                </th>
+
+                <th className="px-4 py-3 font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => updateSort("document_type")}
+                    className="font-semibold hover:underline"
+                  >
+                    Type{sortLabel("document_type")}
+                  </button>
+                </th>
+
+                <th className="px-4 py-3 font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => updateSort("status")}
+                    className="font-semibold hover:underline"
+                  >
+                    Status{sortLabel("status")}
+                  </button>
+                </th>
+
+                <th className="px-4 py-3 font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => updateSort("is_controlled")}
+                    className="font-semibold hover:underline"
+                  >
+                    Controlled{sortLabel("is_controlled")}
+                  </button>
+                </th>
+
+                <th className="px-4 py-3 font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => updateSort("review_due_date")}
+                    className="font-semibold hover:underline"
+                  >
+                    Review Due{sortLabel("review_due_date")}
+                  </button>
+                </th>
+
+                <th className="px-4 py-3 font-semibold">Action</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-200 bg-white">
-              {documents.length === 0 ? (
+              {filteredDocuments.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={7}
                     className="px-4 py-6 text-center text-slate-500"
                   >
-                    No documents found.
+                    No documents match the selected filters.
                   </td>
                 </tr>
               ) : (
-                documents.slice(0, 5).map((document) => (
+                filteredDocuments.map((document) => (
                   <tr key={document.id}>
                     <td className="px-4 py-3 font-medium text-slate-950">
                       <Link
@@ -443,11 +426,24 @@ export default function Home() {
                     </td>
 
                     <td className="px-4 py-3 text-slate-700">
-                      {document.review_due_date
-                        ? new Date(
-                            document.review_due_date,
-                          ).toLocaleDateString()
-                        : "Not set"}
+                      {document.is_controlled ? "Yes" : "No"}
+                    </td>
+
+                    <td
+                      className={`px-4 py-3 ${getReviewDueClass(
+                        document.review_due_date,
+                      )}`}
+                    >
+                      {formatDate(document.review_due_date)}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/documents/${document.id}`}
+                        className="text-sm font-medium text-slate-950 hover:underline"
+                      >
+                        View workspace
+                      </Link>
                     </td>
                   </tr>
                 ))
@@ -455,7 +451,7 @@ export default function Home() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </AppShell>
   );
 }

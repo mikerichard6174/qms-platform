@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/layout/AppShell";
@@ -21,6 +21,10 @@ type AuditDisplayRecord = {
   documentTitle: string;
   revisionLabel: string | null;
 };
+
+function normalize(value: string): string {
+  return value.trim().toLowerCase();
+}
 
 function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -80,6 +84,34 @@ function getStringMetadataValue(
   }
 
   return null;
+}
+
+function isOnOrAfterDate(value: string, startDate: string): boolean {
+  if (!startDate) {
+    return true;
+  }
+
+  const eventDate = new Date(value);
+  const filterDate = new Date(startDate);
+
+  eventDate.setHours(0, 0, 0, 0);
+  filterDate.setHours(0, 0, 0, 0);
+
+  return eventDate >= filterDate;
+}
+
+function isOnOrBeforeDate(value: string, endDate: string): boolean {
+  if (!endDate) {
+    return true;
+  }
+
+  const eventDate = new Date(value);
+  const filterDate = new Date(endDate);
+
+  eventDate.setHours(0, 0, 0, 0);
+  filterDate.setHours(0, 0, 0, 0);
+
+  return eventDate <= filterDate;
 }
 
 function buildAuditDisplayRecords(
@@ -151,57 +183,160 @@ export default function AuditEventsPage() {
   const [tenantName, setTenantName] = useState("Unknown tenant");
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadAuditEvents() {
-      const tenantId = sessionStorage.getItem("tenant_id");
-      const userId = sessionStorage.getItem("user_id");
+  const [searchText, setSearchText] = useState("");
+  const [entityFilter, setEntityFilter] = useState("all");
+  const [actionFilter, setActionFilter] = useState("all");
+  const [actorFilter, setActorFilter] = useState("all");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
 
-      if (!tenantId || !userId) {
-        router.replace("/login");
-        return;
-      }
+  const loadAuditEvents = useCallback(async () => {
+    const tenantId = sessionStorage.getItem("tenant_id");
+    const userId = sessionStorage.getItem("user_id");
 
-      try {
-        const [auditResponse, documentResponse] = await Promise.all([
-          getAuditEventsForTenant(tenantId, 100, 0),
-          getDocuments(),
-        ]);
-
-        const revisionEntries = await Promise.all(
-          documentResponse.items.map(async (document) => {
-            try {
-              const revisions = await getDocumentRevisions(document.id);
-              return [document.id, revisions.items] as const;
-            } catch (error) {
-              console.error(
-                `Failed to fetch revisions for document ${document.id}:`,
-                error,
-              );
-              return [document.id, []] as const;
-            }
-          }),
-        );
-
-        const revisionsByDocument = Object.fromEntries(revisionEntries);
-
-        setAuditRecords(
-          buildAuditDisplayRecords(
-            auditResponse.items,
-            documentResponse.items,
-            revisionsByDocument,
-          ),
-        );
-        setTenantName(sessionStorage.getItem("tenant_name") ?? tenantId);
-      } catch (error) {
-        console.error("Audit events page fetch failed:", error);
-        router.replace("/login");
-      } finally {
-        setIsLoading(false);
-      }
+    if (!tenantId || !userId) {
+      router.replace("/login");
+      return;
     }
 
-    loadAuditEvents();
+    try {
+      const [auditResponse, documentResponse] = await Promise.all([
+        getAuditEventsForTenant(tenantId, 250, 0),
+        getDocuments(),
+      ]);
+
+      const revisionEntries = await Promise.all(
+        documentResponse.items.map(async (document) => {
+          try {
+            const revisions = await getDocumentRevisions(document.id);
+            return [document.id, revisions.items] as const;
+          } catch (error) {
+            console.error(
+              `Failed to fetch revisions for document ${document.id}:`,
+              error,
+            );
+            return [document.id, []] as const;
+          }
+        }),
+      );
+
+      const revisionsByDocument = Object.fromEntries(revisionEntries);
+
+      setAuditRecords(
+        buildAuditDisplayRecords(
+          auditResponse.items,
+          documentResponse.items,
+          revisionsByDocument,
+        ),
+      );
+      setTenantName(sessionStorage.getItem("tenant_name") ?? tenantId);
+    } catch (error) {
+      console.error("Audit events page fetch failed:", error);
+      router.replace("/login");
+    } finally {
+      setIsLoading(false);
+    }
   }, [router]);
+
+  const entityOptions = useMemo(() => {
+    return Array.from(
+      new Set(auditRecords.map((record) => record.event.entity_type)),
+    )
+      .filter(Boolean)
+      .sort();
+  }, [auditRecords]);
+
+  const actionOptions = useMemo(() => {
+    return Array.from(
+      new Set(auditRecords.map((record) => record.event.action)),
+    )
+      .filter(Boolean)
+      .sort();
+  }, [auditRecords]);
+
+  const actorOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        auditRecords.map(
+          (record) => record.event.actor_user_id ?? "System / Not assigned",
+        ),
+      ),
+    )
+      .filter(Boolean)
+      .sort();
+  }, [auditRecords]);
+
+  const filteredAuditRecords = useMemo(() => {
+    const query = normalize(searchText);
+
+    return auditRecords.filter((record) => {
+      const actor = record.event.actor_user_id ?? "System / Not assigned";
+
+      const searchableText = [
+        record.documentNumber,
+        record.documentTitle,
+        record.revisionLabel ?? "",
+        record.event.action,
+        getEntityLabel(record.event.entity_type),
+        record.event.summary,
+        actor,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch =
+        query.length === 0 || searchableText.includes(query);
+
+      const matchesEntity =
+        entityFilter === "all" || record.event.entity_type === entityFilter;
+
+      const matchesAction =
+        actionFilter === "all" || record.event.action === actionFilter;
+
+      const matchesActor = actorFilter === "all" || actor === actorFilter;
+
+      const matchesStartDate = isOnOrAfterDate(
+        record.event.created_at,
+        startDateFilter,
+      );
+
+      const matchesEndDate = isOnOrBeforeDate(
+        record.event.created_at,
+        endDateFilter,
+      );
+
+      return (
+        matchesSearch &&
+        matchesEntity &&
+        matchesAction &&
+        matchesActor &&
+        matchesStartDate &&
+        matchesEndDate
+      );
+    });
+  }, [
+    actionFilter,
+    actorFilter,
+    auditRecords,
+    endDateFilter,
+    entityFilter,
+    searchText,
+    startDateFilter,
+  ]);
+
+  function clearFilters() {
+    setSearchText("");
+    setEntityFilter("all");
+    setActionFilter("all");
+    setActorFilter("all");
+    setStartDateFilter("");
+    setEndDateFilter("");
+  }
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => void loadAuditEvents(), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [loadAuditEvents]);
 
   if (isLoading) {
     return (
@@ -224,26 +359,131 @@ export default function AuditEventsPage() {
           </h2>
 
           <p className="mt-2 max-w-3xl text-sm text-slate-500">
-            Read-only event history tied back to controlled documents,
+            Searchable event history tied back to controlled documents,
             revisions, and approvals.
           </p>
         </div>
 
         <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
-          Tenant: {tenantName} | Events: {auditRecords.length}
+          Tenant: {tenantName} | Showing {filteredAuditRecords.length} of{" "}
+          {auditRecords.length}
         </div>
       </header>
 
-      <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <div className="mb-4">
-          <h3 className="text-xl font-bold text-slate-950">
-            Recent Audit Events
-          </h3>
+      <section className="rounded-2xl bg-white p-6 shadow-sm">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-bold text-slate-950">
+              Recent Audit Events
+            </h3>
 
-          <p className="mt-1 text-sm text-slate-500">
-            Newest events appear first. Each event links back to its controlled
-            document record when available.
-          </p>
+            <p className="mt-1 text-sm text-slate-500">
+              Newest events appear first. Each event links back to its
+              controlled document record when available.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Clear filters
+          </button>
+        </div>
+
+        <div className="mb-5 grid gap-4 lg:grid-cols-4">
+          <label className="block lg:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Search</span>
+
+            <input
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search document, revision, action, summary, or actor"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">
+              Entity Type
+            </span>
+
+            <select
+              value={entityFilter}
+              onChange={(event) => setEntityFilter(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="all">All entities</option>
+              {entityOptions.map((entityType) => (
+                <option key={entityType} value={entityType}>
+                  {getEntityLabel(entityType)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Action</span>
+
+            <select
+              value={actionFilter}
+              onChange={(event) => setActionFilter(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="all">All actions</option>
+              {actionOptions.map((action) => (
+                <option key={action} value={action}>
+                  {formatAction(action)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mb-5 grid gap-4 lg:grid-cols-3">
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Actor</span>
+
+            <select
+              value={actorFilter}
+              onChange={(event) => setActorFilter(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="all">All actors</option>
+              {actorOptions.map((actor) => (
+                <option key={actor} value={actor}>
+                  {actor}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">
+              Start Date
+            </span>
+
+            <input
+              type="date"
+              value={startDateFilter}
+              onChange={(event) => setStartDateFilter(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">
+              End Date
+            </span>
+
+            <input
+              type="date"
+              value={endDateFilter}
+              onChange={(event) => setEndDateFilter(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
         </div>
 
         <div className="overflow-hidden rounded-xl border border-slate-200">
@@ -259,17 +499,17 @@ export default function AuditEventsPage() {
             </thead>
 
             <tbody className="divide-y divide-slate-200 bg-white">
-              {auditRecords.length === 0 ? (
+              {filteredAuditRecords.length === 0 ? (
                 <tr>
                   <td
                     colSpan={5}
                     className="px-4 py-6 text-center text-slate-500"
                   >
-                    No audit events found.
+                    No audit events match the selected filters.
                   </td>
                 </tr>
               ) : (
-                auditRecords.map((record) => (
+                filteredAuditRecords.map((record) => (
                   <tr key={record.event.id} className="align-top">
                     <td className="whitespace-nowrap px-4 py-3 text-slate-700">
                       {formatDateTime(record.event.created_at)}
@@ -329,7 +569,7 @@ export default function AuditEventsPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </AppShell>
   );
 }

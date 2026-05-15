@@ -50,6 +50,20 @@ class DocumentRepository:
         )
         return db.scalar(stmt)
 
+    def get_by_tenant_id_and_program_ids(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        document_id: uuid.UUID,
+        program_ids: list[uuid.UUID],
+    ) -> Document | None:
+        stmt = select(Document).where(
+            Document.tenant_id == tenant_id,
+            Document.id == document_id,
+            Document.program_id.in_(program_ids),
+        )
+        return db.scalar(stmt)
+
     def list_all(self, db: Session) -> list[Document]:
         stmt = select(Document).order_by(Document.created_at.desc())
         return list(db.scalars(stmt).all())
@@ -62,6 +76,22 @@ class DocumentRepository:
         stmt = (
             select(Document)
             .where(Document.tenant_id == tenant_id)
+            .order_by(Document.created_at.desc())
+        )
+        return list(db.scalars(stmt).all())
+
+    def list_by_tenant_and_program_ids(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        program_ids: list[uuid.UUID],
+    ) -> list[Document]:
+        stmt = (
+            select(Document)
+            .where(
+                Document.tenant_id == tenant_id,
+                Document.program_id.in_(program_ids),
+            )
             .order_by(Document.created_at.desc())
         )
         return list(db.scalars(stmt).all())

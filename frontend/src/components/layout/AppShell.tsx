@@ -4,16 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+type ActiveNav =
+  | "dashboard"
+  | "programs"
+  | "documents"
+  | "revisions"
+  | "approvals"
+  | "audit-events"
+  | "standards"
+  | "ncr-capa";
+
 type AppShellProps = {
   children: ReactNode;
-  activeNav?:
-    | "dashboard"
-    | "documents"
-    | "revisions"
-    | "approvals"
-    | "audit-events"
-    | "standards"
-    | "ncr-capa";
+  activeNav?: ActiveNav;
 };
 
 function navClass(isActive: boolean): string {
@@ -28,12 +31,39 @@ function disabledNavClass(): string {
   return "block rounded-lg px-4 py-3 text-sm font-medium text-slate-400";
 }
 
-export function AppShell({ children }: AppShellProps) {
+function resolveActiveNav(
+  pathname: string,
+  explicitActiveNav?: ActiveNav,
+): ActiveNav {
+  if (explicitActiveNav) {
+    return explicitActiveNav;
+  }
+
+  if (pathname.startsWith("/programs")) {
+    return "programs";
+  }
+
+  if (pathname.startsWith("/documents")) {
+    return "documents";
+  }
+
+  if (pathname.startsWith("/audit-events")) {
+    return "audit-events";
+  }
+
+  return "dashboard";
+}
+
+export function AppShell({
+  children,
+  activeNav,
+}: AppShellProps) {
   const pathname = usePathname();
 
-  const isDashboardActive = pathname === "/";
-  const isDocumentsActive = pathname.startsWith("/documents");
-  const isAuditEventsActive = pathname.startsWith("/audit-events");
+  const resolvedActiveNav = resolveActiveNav(
+    pathname,
+    activeNav,
+  );
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -50,33 +80,63 @@ export function AppShell({ children }: AppShellProps) {
           </div>
 
           <nav className="space-y-2">
-            <Link href="/" className={navClass(isDashboardActive)}>
+            <Link
+              href="/"
+              className={navClass(
+                resolvedActiveNav === "dashboard",
+              )}
+            >
               Control Center
             </Link>
 
             <Link
+              href="/programs"
+              className={navClass(
+                resolvedActiveNav === "programs",
+              )}
+            >
+              Program Registry
+            </Link>
+
+            <Link
               href="/documents"
-              className={navClass(isDocumentsActive)}
+              className={navClass(
+                resolvedActiveNav === "documents",
+              )}
             >
               Document Register
             </Link>
 
-            <a className={disabledNavClass()}>Revisions</a>
-            <a className={disabledNavClass()}>Approvals</a>
+            <a className={disabledNavClass()}>
+              Revisions
+            </a>
+
+            <a className={disabledNavClass()}>
+              Approvals
+            </a>
 
             <Link
               href="/audit-events"
-              className={navClass(isAuditEventsActive)}
+              className={navClass(
+                resolvedActiveNav === "audit-events",
+              )}
             >
               Audit Trail
             </Link>
 
-            <a className={disabledNavClass()}>Standards</a>
-            <a className={disabledNavClass()}>NCR / CAPA</a>
+            <a className={disabledNavClass()}>
+              Standards
+            </a>
+
+            <a className={disabledNavClass()}>
+              NCR / CAPA
+            </a>
           </nav>
         </aside>
 
-        <section className="flex-1 p-8">{children}</section>
+        <section className="flex-1 p-8">
+          {children}
+        </section>
       </div>
     </main>
   );

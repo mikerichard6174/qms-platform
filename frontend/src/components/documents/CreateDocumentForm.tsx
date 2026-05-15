@@ -1,16 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
-import { createDocument } from "@/lib/api";
+import { createDocument, getPrograms } from "@/lib/api";
 import type { DocumentRecord } from "@/types/document";
+import type { ProgramRecord } from "@/types/program";
 
 type CreateDocumentFormProps = {
   onChanged?: () => Promise<void> | void;
 };
 
 export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
+  const [programs, setPrograms] = useState<ProgramRecord[]>([]);
+  const [selectedProgramId, setSelectedProgramId] = useState("");
   const [documentNumber, setDocumentNumber] = useState("");
   const [title, setTitle] = useState("");
   const [documentType, setDocumentType] = useState("procedure");
@@ -18,6 +21,7 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
   const [reviewDueDate, setReviewDueDate] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingPrograms, setIsLoadingPrograms] = useState(false);
   const [createdDocument, setCreatedDocument] = useState<DocumentRecord | null>(
     null,
   );
@@ -27,10 +31,30 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
   const trimmedTitle = title.trim();
 
   const canSubmit =
+    selectedProgramId.length > 0 &&
     trimmedDocumentNumber.length > 0 &&
     trimmedTitle.length > 0 &&
     documentType.trim().length > 0 &&
     !isSubmitting;
+
+  useEffect(() => {
+    async function loadPrograms() {
+      try {
+        setIsLoadingPrograms(true);
+        const response = await getPrograms();
+        setPrograms(response.items.filter((program) => program.status === "active"));
+      } catch (error) {
+        console.error("Failed to load programs for document form:", error);
+        setMessage("Unable to load programs. Create or assign a program first.");
+      } finally {
+        setIsLoadingPrograms(false);
+      }
+    }
+
+    if (isExpanded) {
+      void loadPrograms();
+    }
+  }, [isExpanded]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,7 +77,7 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
     try {
       const document = await createDocument({
         tenant_id: tenantId,
-        program_id: null,
+        program_id: selectedProgramId,
         document_number: trimmedDocumentNumber.toUpperCase(),
         title: trimmedTitle,
         document_type: documentType,
@@ -66,6 +90,7 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
         updated_by_user_id: null,
       });
 
+      setSelectedProgramId("");
       setDocumentNumber("");
       setTitle("");
       setDocumentType("procedure");
@@ -94,8 +119,8 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
           </h3>
 
           <p className="mt-1 text-sm text-slate-500">
-            Create the document master record first, then add revision evidence
-            from the document workspace.
+            Create the document master record under an assigned program, then
+            add revision evidence from the document workspace.
           </p>
         </div>
 
@@ -137,12 +162,42 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
           <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
             <p className="font-semibold">Document control guidance</p>
             <p className="mt-1">
-              Use a consistent document number such as QMS-001, PROC-001, or
-              WI-001. The system will store the number in uppercase.
+              New documents must be assigned to a program. Users will only see
+              documents for programs they are assigned to.
             </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
+            <label className="block md:col-span-2">
+              <span className="text-sm font-medium text-slate-700">
+                Program <span className="text-red-600">*</span>
+              </span>
+
+              <select
+                value={selectedProgramId}
+                onChange={(event) => setSelectedProgramId(event.target.value)}
+                required
+                disabled={isLoadingPrograms}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
+              >
+                <option value="">
+                  {isLoadingPrograms
+                    ? "Loading programs..."
+                    : "Select a program"}
+                </option>
+
+                {programs.map((program) => (
+                  <option key={program.id} value={program.id}>
+                    {program.code ? `${program.code} - ${program.name}` : program.name}
+                  </option>
+                ))}
+              </select>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Required. This controls document visibility by program access.
+              </p>
+            </label>
+
             <label className="block">
               <span className="text-sm font-medium text-slate-700">
                 Document Number <span className="text-red-600">*</span>
@@ -236,6 +291,7 @@ export function CreateDocumentForm({ onChanged }: CreateDocumentFormProps) {
             <button
               type="button"
               onClick={() => {
+                setSelectedProgramId("");
                 setDocumentNumber("");
                 setTitle("");
                 setDocumentType("procedure");

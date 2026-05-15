@@ -13,6 +13,7 @@ import type {
   DocumentRevisionListResponse,
   DocumentRevisionRecord,
 } from "@/types/documentRevision";
+import type { ProgramListResponse, ProgramRecord } from "@/types/program";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
@@ -101,6 +102,49 @@ async function apiPost<T>(
   return response.json();
 }
 
+async function apiPut<T>(
+  path: string,
+  body?: unknown,
+  headers?: Record<string, string>,
+): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json();
+}
+
+export type CreateProgramPayload = {
+  tenant_id: string;
+  name: string;
+  code: string | null;
+  description: string | null;
+  status: string;
+  start_date: string | null;
+  end_date: string | null;
+  metadata_json: Record<string, unknown> | null;
+};
+
+export type UpdateProgramPayload = {
+  name?: string | null;
+  code?: string | null;
+  description?: string | null;
+  status?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  metadata_json?: Record<string, unknown> | null;
+};
+
 export type CreateDocumentPayload = {
   tenant_id: string;
   program_id: string | null;
@@ -157,12 +201,37 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   return apiGet<DashboardSummary>("/dashboard/summary");
 }
 
+export async function getPrograms(): Promise<ProgramListResponse> {
+  return apiGet<ProgramListResponse>("/programs", tenantHeaders());
+}
+
+export async function getProgram(id: string): Promise<ProgramRecord> {
+  return apiGet<ProgramRecord>(`/programs/${id}`, tenantHeaders());
+}
+
+export async function createProgram(
+  payload: CreateProgramPayload,
+): Promise<ProgramRecord> {
+  return apiPost<ProgramRecord>("/programs", payload, tenantHeaders());
+}
+
+export async function updateProgram(
+  programId: string,
+  payload: UpdateProgramPayload,
+): Promise<ProgramRecord> {
+  return apiPut<ProgramRecord>(
+    `/programs/${programId}`,
+    payload,
+    tenantHeaders(),
+  );
+}
+
 export async function getDocuments(): Promise<DocumentListResponse> {
-  return apiGet<DocumentListResponse>("/documents", tenantHeaders());
+  return apiGet<DocumentListResponse>("/documents", tenantUserHeaders());
 }
 
 export async function getDocument(id: string): Promise<DocumentRecord> {
-  return apiGet<DocumentRecord>(`/documents/${id}`, tenantHeaders());
+  return apiGet<DocumentRecord>(`/documents/${id}`, tenantUserHeaders());
 }
 
 export async function createDocument(
