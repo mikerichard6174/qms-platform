@@ -12,6 +12,7 @@ type ActiveNav =
   | "approvals"
   | "audit-events"
   | "admin"
+  | "admin-standards"
   | "standards"
   | "ncr-capa";
 
@@ -40,6 +41,14 @@ function resolveActiveNav(
     return explicitActiveNav;
   }
 
+  if (pathname.startsWith("/admin/standards")) {
+    return "admin-standards";
+  }
+
+  if (pathname.startsWith("/admin")) {
+    return "admin";
+  }
+
   if (pathname.startsWith("/programs")) {
     return "programs";
   }
@@ -48,12 +57,12 @@ function resolveActiveNav(
     return "documents";
   }
 
-  if (pathname.startsWith("/audit-events")) {
-    return "audit-events";
+  if (pathname.startsWith("/standards")) {
+    return "standards";
   }
 
-  if (pathname.startsWith("/admin")) {
-    return "admin";
+  if (pathname.startsWith("/audit-events")) {
+    return "audit-events";
   }
 
   return "dashboard";
@@ -100,8 +109,25 @@ export function AppShell({ children, activeNav }: AppShellProps) {
               Document Register
             </Link>
 
-            <Link href="/admin" className={navClass(resolvedActiveNav === "admin")}>
+            <Link
+              href="/standards"
+              className={navClass(resolvedActiveNav === "standards")}
+            >
+              Standards Library
+            </Link>
+
+            <Link
+              href="/admin"
+              className={navClass(resolvedActiveNav === "admin")}
+            >
               Admin Tools
+            </Link>
+
+            <Link
+              href="/admin/standards"
+              className={navClass(resolvedActiveNav === "admin-standards")}
+            >
+              Standards Admin
             </Link>
 
             <a className={disabledNavClass()}>Revisions</a>
@@ -114,7 +140,6 @@ export function AppShell({ children, activeNav }: AppShellProps) {
               Audit Trail
             </Link>
 
-            <a className={disabledNavClass()}>Standards</a>
             <a className={disabledNavClass()}>NCR / CAPA</a>
           </nav>
         </aside>

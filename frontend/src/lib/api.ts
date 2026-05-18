@@ -18,6 +18,20 @@ import type {
   UserProgramAssignmentListResponse,
   UserProgramAssignmentRecord,
 } from "@/types/userProgramAssignment";
+import type {
+  StandardListResponse,
+  StandardRecord,
+} from "@/types/standard";
+
+import type {
+  StandardClauseListResponse,
+  StandardClauseRecord,
+} from "@/types/standardClause";
+
+import type {
+  ProgramStandardMappingListResponse,
+  ProgramStandardMappingRecord,
+} from "@/types/programStandardMapping";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
@@ -214,6 +228,39 @@ export type CreateApprovalPayload = {
   approval_type: string;
   status: string;
   comment: string | null;
+};
+
+export type CreateStandardPayload = {
+  tenant_id: string;
+  name: string;
+  revision: string | null;
+  issuing_body: string | null;
+  description: string | null;
+  status: string;
+  metadata_json: Record<string, unknown> | null;
+};
+
+export type CreateStandardClausePayload = {
+  tenant_id: string;
+  standard_id: string;
+  parent_clause_id: string | null;
+  clause_number: string;
+  title: string;
+  summary: string | null;
+  audit_guidance: string | null;
+  evidence_examples: string | null;
+  sort_order: number;
+  status: string;
+  metadata_json: Record<string, unknown> | null;
+};
+
+export type CreateProgramStandardMappingPayload = {
+  tenant_id: string;
+  program_id: string;
+  standard_id: string;
+  applicability: string;
+  status: string;
+  metadata_json: Record<string, unknown> | null;
 };
 
 export async function getAuthSession(
@@ -438,5 +485,69 @@ export async function getAuditEventsForTenant(
   return apiGet<AuditEventListResponse>(
     `/audit-events/by-tenant/${tenantId}?${buildAuditQuery(limit, offset)}`,
     tenantHeaders(),
+  );
+}
+
+export async function getStandards(): Promise<StandardListResponse> {
+  return apiGet<StandardListResponse>(
+    "/standards",
+    tenantHeaders(),
+  );
+}
+
+export async function getStandard(
+  standardId: string,
+): Promise<StandardRecord> {
+  return apiGet<StandardRecord>(
+    `/standards/${standardId}`,
+    tenantHeaders(),
+  );
+}
+
+export async function createStandard(
+  payload: CreateStandardPayload,
+): Promise<StandardRecord> {
+  return apiPost<StandardRecord>(
+    "/standards",
+    payload,
+    tenantUserHeaders(),
+  );
+}
+
+export async function getStandardClauses(
+  standardId: string,
+): Promise<StandardClauseListResponse> {
+  return apiGet<StandardClauseListResponse>(
+    `/standard-clauses/by-standard/${standardId}`,
+    tenantHeaders(),
+  );
+}
+
+export async function createStandardClause(
+  payload: CreateStandardClausePayload,
+): Promise<StandardClauseRecord> {
+  return apiPost<StandardClauseRecord>(
+    "/standard-clauses",
+    payload,
+    tenantUserHeaders(),
+  );
+}
+
+export async function getProgramStandardMappings(
+  programId: string,
+): Promise<ProgramStandardMappingListResponse> {
+  return apiGet<ProgramStandardMappingListResponse>(
+    `/program-standard-mappings/by-program/${programId}`,
+    tenantHeaders(),
+  );
+}
+
+export async function createProgramStandardMapping(
+  payload: CreateProgramStandardMappingPayload,
+): Promise<ProgramStandardMappingRecord> {
+  return apiPost<ProgramStandardMappingRecord>(
+    "/program-standard-mappings",
+    payload,
+    tenantUserHeaders(),
   );
 }

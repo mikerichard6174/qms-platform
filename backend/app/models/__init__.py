@@ -8,6 +8,9 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.user_program_assignment import UserProgramAssignment
 from app.models.user_role_assignment import UserRoleAssignment
+from app.models.standard import Standard
+from app.models.standard_clause import StandardClause
+from app.models.program_standard_mapping import ProgramStandardMapping
 
 __all__ = [
     "Tenant",
