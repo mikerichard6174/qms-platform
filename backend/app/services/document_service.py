@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.document import Document
 from app.repositories.document import DocumentRepository
+from app.repositories.program import ProgramRepository
 from app.repositories.user_program_assignment import (
     UserProgramAssignmentRepository,
 )
@@ -16,6 +17,7 @@ from app.services.audit_event_service import AuditEventService
 class DocumentService:
     def __init__(self) -> None:
         self.repository = DocumentRepository()
+        self.program_repository = ProgramRepository()
         self.audit_service = AuditEventService()
         self.user_program_assignment_repository = UserProgramAssignmentRepository()
 
@@ -139,6 +141,17 @@ class DocumentService:
         )
         return items, len(items)
 
+    def list_unassigned_documents_for_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+    ) -> tuple[list[Document], int]:
+        items = self.repository.list_unassigned_by_tenant(
+            db=db,
+            tenant_id=tenant_id,
+        )
+        return items, len(items)
+
     def list_documents_for_user_program_access(
         self,
         db: Session,
@@ -161,3 +174,69 @@ class DocumentService:
         )
 
         return items, len(items)
+
+    def assign_document_to_program(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        document_id: uuid.UUID,
+        program_id: uuid.UUID,
+    ) -> Document:
+        document = self.get_document_for_tenant(
+            db=db,
+            tenant_id=tenant_id,
+            document_id=document_id,
+        )
+
+        program = self.program_repository.get_by_tenant_and_id(
+            db=db,
+            tenant_id=tenant_id,
+            program_id=program_id,
+        )
+
+        if not program:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Program not found for tenant.",
+            )
+
+        old_program_id = document.program_id
+        document.program_id = program.id
+        document.updated_by_user_id = actor_user_id
+
+        updated_document = self.repository.save(
+            db=db,
+            document=document,
+        )
+
+        self.audit_service.create_event(
+            db=db,
+            data=AuditEventCreate(
+                tenant_id=tenant_id,
+                actor_user_id=actor_user_id,
+                entity_type="document",
+                entity_id=document.id,
+                action="program_assigned",
+                summary=(
+                    f"Document {document.document_number} was assigned "
+                    f"to program {program.name}."
+                ),
+                old_values_json={
+                    "program_id": str(old_program_id)
+                    if old_program_id
+                    else None,
+                },
+                new_values_json={
+                    "program_id": str(program.id),
+                    "program_name": program.name,
+                    "program_code": program.code,
+                },
+                metadata_json={
+                    "source": "document_service.assign_document_to_program",
+                    "program_id": str(program.id),
+                },
+            ),
+        )
+
+        return updated_document

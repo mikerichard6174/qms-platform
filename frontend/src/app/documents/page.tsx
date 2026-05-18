@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 
 import { CreateDocumentForm } from "@/components/documents/CreateDocumentForm";
 import { AppShell } from "@/components/layout/AppShell";
-import { getDocuments } from "@/lib/api";
+import { getDocuments, getPrograms } from "@/lib/api";
 import type { DocumentRecord } from "@/types/document";
+import type { ProgramRecord } from "@/types/program";
 
 type ControlledFilter = "all" | "controlled" | "uncontrolled";
 
@@ -17,7 +18,8 @@ type SortKey =
   | "document_type"
   | "status"
   | "is_controlled"
-  | "review_due_date";
+  | "review_due_date"
+  | "program_id";
 
 type SortDirection = "asc" | "desc";
 
@@ -58,10 +60,28 @@ function getReviewDueClass(value: string | null): string {
   return "text-slate-700";
 }
 
+function getProgramLabel(
+  programId: string | null,
+  programsById: Map<string, ProgramRecord>,
+): string {
+  if (!programId) {
+    return "Unassigned";
+  }
+
+  const program = programsById.get(programId);
+
+  if (!program) {
+    return "Unknown program";
+  }
+
+  return program.code ? `${program.code} - ${program.name}` : program.name;
+}
+
 function compareValues(
   a: DocumentRecord,
   b: DocumentRecord,
   sortKey: SortKey,
+  programsById: Map<string, ProgramRecord>,
 ): number {
   if (sortKey === "is_controlled") {
     return Number(a.is_controlled) - Number(b.is_controlled);
@@ -74,6 +94,12 @@ function compareValues(
     return aValue.localeCompare(bValue);
   }
 
+  if (sortKey === "program_id") {
+    return getProgramLabel(a.program_id, programsById).localeCompare(
+      getProgramLabel(b.program_id, programsById),
+    );
+  }
+
   return String(a[sortKey] ?? "").localeCompare(String(b[sortKey] ?? ""));
 }
 
@@ -81,16 +107,22 @@ export default function DocumentsPage() {
   const router = useRouter();
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [programs, setPrograms] = useState<ProgramRecord[]>([]);
   const [tenantName, setTenantName] = useState("Unknown tenant");
   const [isLoading, setIsLoading] = useState(true);
 
   const [searchText, setSearchText] = useState("");
+  const [programFilter, setProgramFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [controlledFilter, setControlledFilter] =
     useState<ControlledFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("document_number");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  const programsById = useMemo(() => {
+    return new Map(programs.map((program) => [program.id, program]));
+  }, [programs]);
 
   const loadDocuments = useCallback(async () => {
     const tenant = sessionStorage.getItem("tenant_id");
@@ -102,8 +134,13 @@ export default function DocumentsPage() {
     }
 
     try {
-      const response = await getDocuments();
-      setDocuments(response.items);
+      const [documentResponse, programResponse] = await Promise.all([
+        getDocuments(),
+        getPrograms(),
+      ]);
+
+      setDocuments(documentResponse.items);
+      setPrograms(programResponse.items);
       setTenantName(sessionStorage.getItem("tenant_name") ?? tenant);
     } catch (error) {
       console.error("Documents page fetch failed:", error);
@@ -131,12 +168,18 @@ export default function DocumentsPage() {
     const query = normalize(searchText);
 
     const filtered = documents.filter((document) => {
+      const programLabel = getProgramLabel(document.program_id, programsById);
+
       const matchesSearch =
         query.length === 0 ||
         normalize(document.document_number).includes(query) ||
         normalize(document.title).includes(query) ||
         normalize(document.document_type).includes(query) ||
-        normalize(document.status).includes(query);
+        normalize(document.status).includes(query) ||
+        normalize(programLabel).includes(query);
+
+      const matchesProgram =
+        programFilter === "all" || document.program_id === programFilter;
 
       const matchesStatus =
         statusFilter === "all" || document.status === statusFilter;
@@ -151,6 +194,7 @@ export default function DocumentsPage() {
 
       return (
         matchesSearch &&
+        matchesProgram &&
         matchesStatus &&
         matchesType &&
         matchesControlled
@@ -158,12 +202,14 @@ export default function DocumentsPage() {
     });
 
     return filtered.sort((a, b) => {
-      const result = compareValues(a, b, sortKey);
+      const result = compareValues(a, b, sortKey, programsById);
       return sortDirection === "asc" ? result : result * -1;
     });
   }, [
     controlledFilter,
     documents,
+    programFilter,
+    programsById,
     searchText,
     sortDirection,
     sortKey,
@@ -173,6 +219,7 @@ export default function DocumentsPage() {
 
   function clearFilters() {
     setSearchText("");
+    setProgramFilter("all");
     setStatusFilter("all");
     setTypeFilter("all");
     setControlledFilter("all");
@@ -241,7 +288,8 @@ export default function DocumentsPage() {
             </h3>
 
             <p className="mt-1 text-sm text-slate-500">
-              Search, filter, and sort controlled document master records.
+              Search, filter, and sort controlled document master records by
+              program scope.
             </p>
           </div>
 
@@ -261,9 +309,26 @@ export default function DocumentsPage() {
             <input
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Search document number, title, type, or status"
+              placeholder="Search document number, title, type, status, or program"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Program</span>
+
+            <select
+              value={programFilter}
+              onChange={(event) => setProgramFilter(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="all">All accessible programs</option>
+              {programs.map((program) => (
+                <option key={program.id} value={program.id}>
+                  {program.code ? `${program.code} - ${program.name}` : program.name}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label className="block">
@@ -282,7 +347,9 @@ export default function DocumentsPage() {
               ))}
             </select>
           </label>
+        </div>
 
+        <div className="mb-5 grid gap-4 lg:grid-cols-2">
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Type</span>
 
@@ -299,9 +366,7 @@ export default function DocumentsPage() {
               ))}
             </select>
           </label>
-        </div>
 
-        <div className="mb-5 max-w-xs">
           <label className="block">
             <span className="text-sm font-medium text-slate-700">
               Control Type
@@ -342,6 +407,16 @@ export default function DocumentsPage() {
                     className="font-semibold hover:underline"
                   >
                     Title{sortLabel("title")}
+                  </button>
+                </th>
+
+                <th className="px-4 py-3 font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => updateSort("program_id")}
+                    className="font-semibold hover:underline"
+                  >
+                    Program{sortLabel("program_id")}
                   </button>
                 </th>
 
@@ -393,7 +468,7 @@ export default function DocumentsPage() {
               {filteredDocuments.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-6 text-center text-slate-500"
                   >
                     No documents match the selected filters.
@@ -413,6 +488,10 @@ export default function DocumentsPage() {
 
                     <td className="px-4 py-3 text-slate-700">
                       {document.title}
+                    </td>
+
+                    <td className="px-4 py-3 text-slate-700">
+                      {getProgramLabel(document.program_id, programsById)}
                     </td>
 
                     <td className="px-4 py-3 text-slate-700">

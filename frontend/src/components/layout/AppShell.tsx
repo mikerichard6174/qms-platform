@@ -11,6 +11,7 @@ type ActiveNav =
   | "revisions"
   | "approvals"
   | "audit-events"
+  | "admin"
   | "standards"
   | "ncr-capa";
 
@@ -51,19 +52,17 @@ function resolveActiveNav(
     return "audit-events";
   }
 
+  if (pathname.startsWith("/admin")) {
+    return "admin";
+  }
+
   return "dashboard";
 }
 
-export function AppShell({
-  children,
-  activeNav,
-}: AppShellProps) {
+export function AppShell({ children, activeNav }: AppShellProps) {
   const pathname = usePathname();
 
-  const resolvedActiveNav = resolveActiveNav(
-    pathname,
-    activeNav,
-  );
+  const resolvedActiveNav = resolveActiveNav(pathname, activeNav);
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -82,61 +81,45 @@ export function AppShell({
           <nav className="space-y-2">
             <Link
               href="/"
-              className={navClass(
-                resolvedActiveNav === "dashboard",
-              )}
+              className={navClass(resolvedActiveNav === "dashboard")}
             >
               Control Center
             </Link>
 
             <Link
               href="/programs"
-              className={navClass(
-                resolvedActiveNav === "programs",
-              )}
+              className={navClass(resolvedActiveNav === "programs")}
             >
               Program Registry
             </Link>
 
             <Link
               href="/documents"
-              className={navClass(
-                resolvedActiveNav === "documents",
-              )}
+              className={navClass(resolvedActiveNav === "documents")}
             >
               Document Register
             </Link>
 
-            <a className={disabledNavClass()}>
-              Revisions
-            </a>
+            <Link href="/admin" className={navClass(resolvedActiveNav === "admin")}>
+              Admin Tools
+            </Link>
 
-            <a className={disabledNavClass()}>
-              Approvals
-            </a>
+            <a className={disabledNavClass()}>Revisions</a>
+            <a className={disabledNavClass()}>Approvals</a>
 
             <Link
               href="/audit-events"
-              className={navClass(
-                resolvedActiveNav === "audit-events",
-              )}
+              className={navClass(resolvedActiveNav === "audit-events")}
             >
               Audit Trail
             </Link>
 
-            <a className={disabledNavClass()}>
-              Standards
-            </a>
-
-            <a className={disabledNavClass()}>
-              NCR / CAPA
-            </a>
+            <a className={disabledNavClass()}>Standards</a>
+            <a className={disabledNavClass()}>NCR / CAPA</a>
           </nav>
         </aside>
 
-        <section className="flex-1 p-8">
-          {children}
-        </section>
+        <section className="flex-1 p-8">{children}</section>
       </div>
     </main>
   );

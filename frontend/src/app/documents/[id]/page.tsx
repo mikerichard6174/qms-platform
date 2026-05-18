@@ -21,11 +21,13 @@ import {
   getDocument,
   getDocumentApprovals,
   getDocumentRevisions,
+  getProgram,
 } from "@/lib/api";
 import type { AuditEventRecord } from "@/types/auditEvent";
 import type { DocumentRecord } from "@/types/document";
 import type { DocumentApprovalRecord } from "@/types/documentApproval";
 import type { DocumentRevisionRecord } from "@/types/documentRevision";
+import type { ProgramRecord } from "@/types/program";
 
 const DEFAULT_APPROVER_USER_ID =
   process.env.NEXT_PUBLIC_DEFAULT_APPROVER_USER_ID ?? "";
@@ -57,6 +59,14 @@ function formatDate(value: string | null): string {
   return new Date(value).toLocaleDateString();
 }
 
+function getProgramLabel(program: ProgramRecord | null): string {
+  if (!program) {
+    return "Program unavailable";
+  }
+
+  return program.code ? `${program.code} - ${program.name}` : program.name;
+}
+
 function StatusBadge({ status }: { status: string }) {
   return (
     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
@@ -73,6 +83,22 @@ function BooleanBadge({ value }: { value: boolean }) {
   ) : (
     <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
       Uncontrolled
+    </span>
+  );
+}
+
+function ProgramBadge({ program }: { program: ProgramRecord | null }) {
+  if (!program) {
+    return (
+      <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+        Program unavailable
+      </span>
+    );
+  }
+
+  return (
+    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+      Program: {getProgramLabel(program)}
     </span>
   );
 }
@@ -193,6 +219,7 @@ export default function DocumentDetailPage({
   const router = useRouter();
 
   const [document, setDocument] = useState<DocumentRecord | null>(null);
+  const [program, setProgram] = useState<ProgramRecord | null>(null);
   const [revisions, setRevisions] = useState<DocumentRevisionRecord[]>([]);
   const [approvalsByRevision, setApprovalsByRevision] = useState<
     Record<string, DocumentApprovalRecord[]>
@@ -229,6 +256,10 @@ export default function DocumentDetailPage({
     try {
       const documentRecord = await getDocument(resolvedParams.id);
 
+      const programRecord = documentRecord.program_id
+        ? await getProgram(documentRecord.program_id)
+        : null;
+
       const revisionResponse = await getDocumentRevisions(resolvedParams.id);
 
       const revisionRecords = revisionResponse.items;
@@ -249,6 +280,7 @@ export default function DocumentDetailPage({
       });
 
       setDocument(documentRecord);
+      setProgram(programRecord);
       setRevisions(revisionRecords);
       setApprovalsByRevision(approvalRecordsByRevision);
       setAuditEvents(relatedAuditEvents);
@@ -301,6 +333,10 @@ export default function DocumentDetailPage({
           </h2>
 
           <p className="mt-2 text-sm text-slate-500">{document.title}</p>
+
+          <div className="mt-3">
+            <ProgramBadge program={program} />
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -336,9 +372,17 @@ export default function DocumentDetailPage({
                 <div className="flex flex-wrap items-center gap-3">
                   <StatusBadge status={document.status} />
                   <BooleanBadge value={document.is_controlled} />
+                  <ProgramBadge program={program} />
                 </div>
 
                 <div className="mt-4 grid gap-2 text-sm text-slate-600">
+                  <p>
+                    <span className="font-semibold text-slate-950">
+                      Program:
+                    </span>{" "}
+                    {getProgramLabel(program)}
+                  </p>
+
                   <p>
                     <span className="font-semibold text-slate-950">
                       Document Type:
@@ -370,6 +414,20 @@ export default function DocumentDetailPage({
               </div>
 
               <div className="grid gap-4 md:min-w-80">
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Program Scope
+                  </p>
+
+                  <p className="mt-2 text-lg font-bold text-slate-950">
+                    {getProgramLabel(program)}
+                  </p>
+
+                  <p className="mt-1 text-xs text-blue-700">
+                    Access is controlled by user-program assignment.
+                  </p>
+                </div>
+
                 <div className="rounded-xl border border-slate-200 p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Current Revision
@@ -515,6 +573,7 @@ export default function DocumentDetailPage({
                         </h4>
 
                         <StatusBadge status={revision.status} />
+                        <ProgramBadge program={program} />
 
                         {revision.is_effective ? (
                           <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
@@ -536,6 +595,14 @@ export default function DocumentDetailPage({
                     </div>
 
                     <div className="grid min-w-56 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                      <div className="flex justify-between gap-4">
+                        <span className="text-slate-500">Program</span>
+
+                        <span className="font-medium text-slate-950">
+                          {program?.code ?? program?.name ?? "Unavailable"}
+                        </span>
+                      </div>
+
                       <div className="flex justify-between gap-4">
                         <span className="text-slate-500">Created</span>
 
@@ -572,7 +639,10 @@ export default function DocumentDetailPage({
                     </div>
                   </div>
 
-                  <RevisionWorkflowGuidance revision={revision} approvals={approvals} />
+                  <RevisionWorkflowGuidance
+                    revision={revision}
+                    approvals={approvals}
+                  />
 
                   <details className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <summary className="cursor-pointer text-sm font-semibold text-slate-950">
@@ -626,7 +696,9 @@ export default function DocumentDetailPage({
                                 </td>
 
                                 <td className="px-3 py-2">
-                                  <ApprovalStatusBadge status={approval.status} />
+                                  <ApprovalStatusBadge
+                                    status={approval.status}
+                                  />
                                 </td>
 
                                 <td className="px-3 py-2">

@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.routes.admin_documents import router as admin_documents_router
 from app.api.routes.audit_events import router as audit_events_router
 from app.api.routes.auth_session import router as auth_session_router
 from app.api.routes.dashboard import router as dashboard_router
@@ -22,6 +23,7 @@ api_router.include_router(programs_router)
 api_router.include_router(user_program_assignments_router)
 
 api_router.include_router(documents_router)
+api_router.include_router(admin_documents_router)
 api_router.include_router(document_revisions_router)
 api_router.include_router(document_approvals_router)
 

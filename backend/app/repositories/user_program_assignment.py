@@ -25,7 +25,28 @@ class UserProgramAssignmentRepository:
 
         return assignment
 
-    def get_existing(
+    def delete(
+        self,
+        db: Session,
+        assignment: UserProgramAssignment,
+    ) -> None:
+        db.delete(assignment)
+        db.commit()
+
+    def get_by_tenant_and_id(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+        assignment_id: uuid.UUID,
+    ) -> UserProgramAssignment | None:
+        stmt = select(UserProgramAssignment).where(
+            UserProgramAssignment.tenant_id == tenant_id,
+            UserProgramAssignment.id == assignment_id,
+        )
+
+        return db.scalar(stmt)
+
+    def get_existing_assignment(
         self,
         db: Session,
         tenant_id: uuid.UUID,
@@ -57,23 +78,6 @@ class UserProgramAssignmentRepository:
 
         return list(db.scalars(stmt).all())
 
-    def list_by_program(
-        self,
-        db: Session,
-        tenant_id: uuid.UUID,
-        program_id: uuid.UUID,
-    ) -> list[UserProgramAssignment]:
-        stmt = (
-            select(UserProgramAssignment)
-            .where(
-                UserProgramAssignment.tenant_id == tenant_id,
-                UserProgramAssignment.program_id == program_id,
-            )
-            .order_by(UserProgramAssignment.created_at.desc())
-        )
-
-        return list(db.scalars(stmt).all())
-
     def list_program_ids_for_user(
         self,
         db: Session,
@@ -86,11 +90,3 @@ class UserProgramAssignmentRepository:
         )
 
         return list(db.scalars(stmt).all())
-
-    def delete(
-        self,
-        db: Session,
-        assignment: UserProgramAssignment,
-    ) -> None:
-        db.delete(assignment)
-        db.commit()

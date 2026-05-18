@@ -22,6 +22,10 @@ class DocumentCreate(DocumentBase):
     updated_by_user_id: uuid.UUID | None = None
 
 
+class DocumentProgramAssignmentUpdate(BaseModel):
+    program_id: uuid.UUID
+
+
 class DocumentResponse(DocumentBase):
     model_config = ConfigDict(from_attributes=True)
 

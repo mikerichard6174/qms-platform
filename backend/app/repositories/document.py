@@ -80,6 +80,21 @@ class DocumentRepository:
         )
         return list(db.scalars(stmt).all())
 
+    def list_unassigned_by_tenant(
+        self,
+        db: Session,
+        tenant_id: uuid.UUID,
+    ) -> list[Document]:
+        stmt = (
+            select(Document)
+            .where(
+                Document.tenant_id == tenant_id,
+                Document.program_id.is_(None),
+            )
+            .order_by(Document.created_at.desc())
+        )
+        return list(db.scalars(stmt).all())
+
     def list_by_tenant_and_program_ids(
         self,
         db: Session,

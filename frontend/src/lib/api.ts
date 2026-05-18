@@ -14,6 +14,10 @@ import type {
   DocumentRevisionRecord,
 } from "@/types/documentRevision";
 import type { ProgramListResponse, ProgramRecord } from "@/types/program";
+import type {
+  UserProgramAssignmentListResponse,
+  UserProgramAssignmentRecord,
+} from "@/types/userProgramAssignment";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
@@ -124,6 +128,21 @@ async function apiPut<T>(
   return response.json();
 }
 
+async function apiDelete(
+  path: string,
+  headers?: Record<string, string>,
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "DELETE",
+    headers,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+}
+
 export type CreateProgramPayload = {
   tenant_id: string;
   name: string;
@@ -145,6 +164,12 @@ export type UpdateProgramPayload = {
   metadata_json?: Record<string, unknown> | null;
 };
 
+export type CreateUserProgramAssignmentPayload = {
+  tenant_id: string;
+  user_id: string;
+  program_id: string;
+};
+
 export type CreateDocumentPayload = {
   tenant_id: string;
   program_id: string | null;
@@ -158,6 +183,10 @@ export type CreateDocumentPayload = {
   metadata_json: Record<string, unknown> | null;
   created_by_user_id: string | null;
   updated_by_user_id: string | null;
+};
+
+export type AssignDocumentProgramPayload = {
+  program_id: string;
 };
 
 export type CreateRevisionPayload = {
@@ -226,6 +255,34 @@ export async function updateProgram(
   );
 }
 
+export async function createUserProgramAssignment(
+  payload: CreateUserProgramAssignmentPayload,
+): Promise<UserProgramAssignmentRecord> {
+  return apiPost<UserProgramAssignmentRecord>(
+    "/user-program-assignments",
+    payload,
+    tenantHeaders(),
+  );
+}
+
+export async function getUserProgramAssignments(
+  userId: string,
+): Promise<UserProgramAssignmentListResponse> {
+  return apiGet<UserProgramAssignmentListResponse>(
+    `/user-program-assignments/by-user/${userId}`,
+    tenantHeaders(),
+  );
+}
+
+export async function revokeUserProgramAssignment(
+  assignmentId: string,
+): Promise<void> {
+  return apiDelete(
+    `/user-program-assignments/${assignmentId}`,
+    tenantUserHeaders(),
+  );
+}
+
 export async function getDocuments(): Promise<DocumentListResponse> {
   return apiGet<DocumentListResponse>("/documents", tenantUserHeaders());
 }
@@ -238,6 +295,24 @@ export async function createDocument(
   payload: CreateDocumentPayload,
 ): Promise<DocumentRecord> {
   return apiPost<DocumentRecord>("/documents", payload, tenantUserHeaders());
+}
+
+export async function getUnassignedDocuments(): Promise<DocumentListResponse> {
+  return apiGet<DocumentListResponse>(
+    "/admin/documents/unassigned",
+    tenantHeaders(),
+  );
+}
+
+export async function assignDocumentToProgram(
+  documentId: string,
+  payload: AssignDocumentProgramPayload,
+): Promise<DocumentRecord> {
+  return apiPut<DocumentRecord>(
+    `/admin/documents/${documentId}/program`,
+    payload,
+    tenantUserHeaders(),
+  );
 }
 
 export async function getDocumentRevisions(
