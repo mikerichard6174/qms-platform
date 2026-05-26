@@ -17,6 +17,10 @@ from app.api.routes.standards import router as standards_router
 from app.api.routes.user_program_assignments import (
     router as user_program_assignments_router,
 )
+from app.api.routes.cdrl_clause_mappings import (
+    router as cdrl_clause_mappings_router,
+)
+from app.api.routes.cdrls import router as cdrls_router
 
 api_router = APIRouter()
 
@@ -30,6 +34,9 @@ api_router.include_router(user_program_assignments_router)
 api_router.include_router(standards_router)
 api_router.include_router(standard_clauses_router)
 api_router.include_router(program_standard_mappings_router)
+
+api_router.include_router(cdrls_router)
+api_router.include_router(cdrl_clause_mappings_router)
 
 api_router.include_router(documents_router)
 api_router.include_router(admin_documents_router)

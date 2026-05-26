@@ -35,6 +35,11 @@ class Program(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         "UserRoleAssignment",
         back_populates="program",
     )
+    cdrls = relationship(
+        "Cdrl",
+        back_populates="program",
+        cascade="all, delete-orphan",
+    )
     standard_mappings = relationship(
         "ProgramStandardMapping",
         back_populates="program",

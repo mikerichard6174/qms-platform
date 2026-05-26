@@ -1,10 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { WorkspaceActionCard } from "@/components/workspace/WorkspaceActionCard";
+import { WorkspaceEmptyState } from "@/components/workspace/WorkspaceEmptyState";
+import { WorkspacePageHeader } from "@/components/workspace/WorkspacePageHeader";
+import { WorkspaceSectionCard } from "@/components/workspace/WorkspaceSectionCard";
+import { WorkspaceStatCard } from "@/components/workspace/WorkspaceStatCard";
 import {
   assignDocumentToProgram,
   createUserProgramAssignment,
@@ -52,7 +56,7 @@ export default function AdminToolsPage() {
     UserProgramAssignmentRecord[]
   >([]);
 
-  const [tenantName, setTenantName] = useState("Unknown tenant");
+  const [tenantName, setTenantName] = useState("Unknown organization");
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
@@ -168,7 +172,7 @@ export default function AdminToolsPage() {
     const trimmedUserId = assignmentUserId.trim();
 
     if (!tenantId) {
-      setMessage("Tenant session missing.");
+      setMessage("Organization session missing.");
       return;
     }
 
@@ -255,309 +259,335 @@ export default function AdminToolsPage() {
 
   return (
     <AppShell activeNav="admin">
-      <header className="mb-8 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-slate-500">
-            System Governance
-          </p>
-
-          <h2 className="mt-1 text-3xl font-bold text-slate-950">
-            Admin Tools
-          </h2>
-
-          <p className="mt-2 text-sm text-slate-500">Tenant: {tenantName}</p>
-        </div>
-
-        <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
-          Unassigned Documents: {unassignedDocuments.length}
-        </div>
-      </header>
-
-      <section className="rounded-2xl border border-blue-200 bg-blue-50 p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-blue-700">
-              Program Access Control
-            </p>
-
-            <h3 className="mt-1 text-xl font-bold text-slate-950">
-              User Program Assignments
-            </h3>
-
-            <p className="mt-1 max-w-3xl text-sm text-blue-800">
-              Assign users to programs so backend document visibility can be
-              enforced by program scope.
-            </p>
-          </div>
-
-          <Link
-            href="/audit-events"
-            className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
-          >
-            View Audit Trail
-          </Link>
-        </div>
-
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          <label className="block lg:col-span-2">
-            <span className="text-sm font-medium text-slate-700">User ID</span>
-
-            <input
-              value={lookupUserId}
-              onChange={(event) => {
-                setLookupUserId(event.target.value);
-                setAssignmentUserId(event.target.value);
-              }}
-              placeholder="Paste user UUID"
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </label>
-
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={() => void handleLoadUserAssignments()}
-              disabled={isLoadingAssignments}
-              className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              {isLoadingAssignments ? "Loading..." : "Load Assignments"}
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          <label className="block lg:col-span-2">
-            <span className="text-sm font-medium text-slate-700">
-              Assign Program
-            </span>
-
-            <select
-              value={assignmentProgramId}
-              onChange={(event) => setAssignmentProgramId(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="">Select program</option>
-
-              {activePrograms.map((program) => (
-                <option key={program.id} value={program.id}>
-                  {getProgramLabel(program)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={() => void handleCreateUserProgramAssignment()}
-              disabled={isAssigningUserProgram}
-              className="w-full rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              {isAssigningUserProgram ? "Assigning..." : "Assign User"}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
-        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h3 className="text-xl font-bold text-slate-950">
-              Loaded User Assignments
-            </h3>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Current program access for the selected user.
-            </p>
-          </div>
-
-          <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
-            Assignments: {userAssignments.length}
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-slate-200">
-          <table className="w-full border-collapse text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Program</th>
-                <th className="px-4 py-3 font-semibold">Program ID</th>
-                <th className="px-4 py-3 font-semibold">Assigned At</th>
-                <th className="px-4 py-3 font-semibold">Action</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-200 bg-white">
-              {userAssignments.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={4}
-                    className="px-4 py-6 text-center text-slate-500"
-                  >
-                    No assignments loaded for this user.
-                  </td>
-                </tr>
-              ) : (
-                userAssignments.map((assignment) => (
-                  <tr key={assignment.id}>
-                    <td className="px-4 py-3 font-medium text-slate-950">
-                      {getProgramLabelById(
-                        assignment.program_id,
-                        programsById,
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3 text-xs text-slate-500">
-                      {assignment.program_id}
-                    </td>
-
-                    <td className="px-4 py-3 text-slate-700">
-                      {new Date(assignment.created_at).toLocaleString()}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void handleRevokeUserProgramAssignment(assignment)
-                        }
-                        disabled={activeAssignmentId === assignment.id}
-                        className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {activeAssignmentId === assignment.id
-                          ? "Revoking..."
-                          : "Revoke"}
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-amber-700">
-              Administrative Control
-            </p>
-
-            <h3 className="mt-1 text-xl font-bold text-slate-950">
-              Unassigned Documents
-            </h3>
-
-            <p className="mt-1 max-w-3xl text-sm text-amber-800">
-              These records do not have a program assignment. Assigning them to
-              a program restores visibility for users assigned to that program
-              and creates an audit event.
-            </p>
-          </div>
-
-          <Link
-            href="/audit-events"
-            className="rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
-          >
-            View Audit Trail
-          </Link>
-        </div>
-      </section>
+      <WorkspacePageHeader
+        breadcrumbs={[
+          {
+            label: "Admin Tools",
+          },
+        ]}
+        eyebrow="Administration"
+        title="Admin Hub"
+        description={`Manage system setup, program access, standards, and cleanup tasks for ${tenantName}.`}
+      />
 
       {message ? (
-        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm">
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm">
           {message}
         </div>
       ) : null}
 
-      <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
-        <div className="mb-5">
-          <h3 className="text-xl font-bold text-slate-950">
-            Document Program Assignment
-          </h3>
+      <section className="grid gap-4 lg:grid-cols-4">
+        <WorkspaceStatCard
+          label="Programs"
+          value={programs.length}
+          helperText="Programs available in this organization."
+        />
 
-          <p className="mt-1 text-sm text-slate-500">
-            Assign legacy or unscoped document records to the correct program.
-          </p>
+        <WorkspaceStatCard
+          label="Active Programs"
+          value={activePrograms.length}
+          helperText="Programs currently available for assignment."
+        />
+
+        <WorkspaceStatCard
+          label="Unassigned Documents"
+          value={unassignedDocuments.length}
+          helperText="Documents that still need program ownership."
+        />
+
+        <WorkspaceStatCard
+          label="Loaded User Access"
+          value={userAssignments.length}
+          helperText="Assignments loaded for the selected user."
+        />
+      </section>
+
+      <section className="mt-8 grid gap-6 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <WorkspaceSectionCard
+            title="Admin Areas"
+            description="Use these tools to manage the controlled setup areas of the platform."
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <WorkspaceActionCard
+                title="Standards Admin"
+                description="Add standards, manage clause outlines, and assign standards to programs."
+                href="/admin/standards"
+              />
+
+              <WorkspaceActionCard
+                title="Program Access"
+                description="Grant or remove a user's access to specific programs."
+                href="#program-access"
+              />
+
+              <WorkspaceActionCard
+                title="Document Assignment"
+                description="Assign unscoped documents to the correct program."
+                href="#document-assignment"
+              />
+
+              <WorkspaceActionCard
+                title="User and Role Admin"
+                description="Coming later with role-based permissions and account management."
+                disabled
+              />
+            </div>
+          </WorkspaceSectionCard>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-slate-200">
-          <table className="w-full border-collapse text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Document #</th>
-                <th className="px-4 py-3 font-semibold">Title</th>
-                <th className="px-4 py-3 font-semibold">Type</th>
-                <th className="px-4 py-3 font-semibold">Assign Program</th>
-                <th className="px-4 py-3 font-semibold">Action</th>
-              </tr>
-            </thead>
+        <WorkspaceSectionCard
+          title="Admin Guidance"
+          description="These actions affect what users can see and how records are controlled."
+        >
+          <div className="space-y-3 text-sm leading-6 text-slate-600">
+            <p>
+              Standards and clause outlines should be maintained by authorized
+              administrators only.
+            </p>
 
-            <tbody className="divide-y divide-slate-200 bg-white">
-              {unassignedDocuments.length === 0 ? (
+            <p>
+              Program access controls which records a user can view as program
+              visibility expands.
+            </p>
+
+            <p>
+              Unassigned documents should be reviewed and placed under the
+              correct program as soon as possible.
+            </p>
+          </div>
+        </WorkspaceSectionCard>
+      </section>
+
+      <div id="program-access" className="mt-8">
+        <WorkspaceSectionCard
+          title="Program Access"
+          description="Assign users to programs so they can see records connected to those programs."
+        >
+          <div className="grid gap-4 lg:grid-cols-3">
+            <label className="block lg:col-span-2">
+              <span className="text-sm font-medium text-slate-700">
+                User ID
+              </span>
+
+              <input
+                value={lookupUserId}
+                onChange={(event) => {
+                  setLookupUserId(event.target.value);
+                  setAssignmentUserId(event.target.value);
+                }}
+                placeholder="Paste user ID"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+
+              <p className="mt-1 text-xs text-slate-500">
+                User search and friendly names will be added later.
+              </p>
+            </label>
+
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={() => void handleLoadUserAssignments()}
+                disabled={isLoadingAssignments}
+                className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {isLoadingAssignments ? "Loading..." : "Load Access"}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            <label className="block lg:col-span-2">
+              <span className="text-sm font-medium text-slate-700">
+                Program
+              </span>
+
+              <select
+                value={assignmentProgramId}
+                onChange={(event) => setAssignmentProgramId(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">Select program</option>
+
+                {activePrograms.map((program) => (
+                  <option key={program.id} value={program.id}>
+                    {getProgramLabel(program)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={() => void handleCreateUserProgramAssignment()}
+                disabled={isAssigningUserProgram}
+                className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {isAssigningUserProgram ? "Assigning..." : "Grant Access"}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-8">
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-950">
+                  Loaded User Access
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Current program access for the selected user.
+                </p>
+              </div>
+
+              <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
+                Assignments: {userAssignments.length}
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <table className="w-full border-collapse text-left text-sm">
+                <thead className="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Program</th>
+                    <th className="px-4 py-3 font-semibold">Assigned</th>
+                    <th className="px-4 py-3 font-semibold">Action</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {userAssignments.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-6">
+                        <WorkspaceEmptyState
+                          title="No program access loaded"
+                          description="Enter a user ID and load access to see that user's program assignments."
+                        />
+                      </td>
+                    </tr>
+                  ) : (
+                    userAssignments.map((assignment) => (
+                      <tr key={assignment.id}>
+                        <td className="px-4 py-3 font-medium text-slate-950">
+                          {getProgramLabelById(
+                            assignment.program_id,
+                            programsById,
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-slate-700">
+                          {new Date(assignment.created_at).toLocaleString()}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleRevokeUserProgramAssignment(assignment)
+                            }
+                            disabled={activeAssignmentId === assignment.id}
+                            className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {activeAssignmentId === assignment.id
+                              ? "Revoking..."
+                              : "Revoke Access"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </WorkspaceSectionCard>
+      </div>
+
+      <div id="document-assignment" className="mt-8">
+        <WorkspaceSectionCard
+          title="Document Assignment"
+          description="Assign documents without a program to the correct program so they can be governed properly."
+        >
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead className="bg-slate-50 text-slate-600">
                 <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-6 text-center text-slate-500"
-                  >
-                    No unassigned documents found.
-                  </td>
+                  <th className="px-4 py-3 font-semibold">Document Number</th>
+                  <th className="px-4 py-3 font-semibold">Title</th>
+                  <th className="px-4 py-3 font-semibold">Type</th>
+                  <th className="px-4 py-3 font-semibold">Program</th>
+                  <th className="px-4 py-3 font-semibold">Action</th>
                 </tr>
-              ) : (
-                unassignedDocuments.map((document) => (
-                  <tr key={document.id}>
-                    <td className="px-4 py-3 font-medium text-slate-950">
-                      {document.document_number}
-                    </td>
+              </thead>
 
-                    <td className="px-4 py-3 text-slate-700">
-                      {document.title}
-                    </td>
-
-                    <td className="px-4 py-3 text-slate-700">
-                      {document.document_type}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <select
-                        value={selectedProgramByDocument[document.id] ?? ""}
-                        onChange={(event) =>
-                          setSelectedProgramByDocument((current) => ({
-                            ...current,
-                            [document.id]: event.target.value,
-                          }))
-                        }
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      >
-                        <option value="">Select program</option>
-
-                        {activePrograms.map((program) => (
-                          <option key={program.id} value={program.id}>
-                            {getProgramLabel(program)}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => void handleAssignProgram(document.id)}
-                        disabled={activeDocumentId === document.id}
-                        className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                      >
-                        {activeDocumentId === document.id
-                          ? "Assigning..."
-                          : "Assign"}
-                      </button>
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {unassignedDocuments.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-6">
+                      <WorkspaceEmptyState
+                        title="No unassigned documents"
+                        description="All documents currently have a program assignment."
+                      />
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                ) : (
+                  unassignedDocuments.map((document) => (
+                    <tr key={document.id}>
+                      <td className="px-4 py-3 font-medium text-slate-950">
+                        {document.document_number}
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-700">
+                        {document.title}
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-700">
+                        {document.document_type}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <select
+                          value={selectedProgramByDocument[document.id] ?? ""}
+                          onChange={(event) =>
+                            setSelectedProgramByDocument((current) => ({
+                              ...current,
+                              [document.id]: event.target.value,
+                            }))
+                          }
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        >
+                          <option value="">Select program</option>
+
+                          {activePrograms.map((program) => (
+                            <option key={program.id} value={program.id}>
+                              {getProgramLabel(program)}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => void handleAssignProgram(document.id)}
+                          disabled={activeDocumentId === document.id}
+                          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        >
+                          {activeDocumentId === document.id
+                            ? "Assigning..."
+                            : "Assign"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </WorkspaceSectionCard>
+      </div>
     </AppShell>
   );
 }

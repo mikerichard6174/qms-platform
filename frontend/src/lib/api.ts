@@ -33,6 +33,16 @@ import type {
   ProgramStandardMappingRecord,
 } from "@/types/programStandardMapping";
 
+import type {
+  CdrlListResponse,
+  CdrlRecord,
+} from "@/types/cdrl";
+
+import type {
+  CdrlClauseMappingListResponse,
+  CdrlClauseMappingRecord,
+} from "@/types/cdrlClauseMapping";
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
@@ -259,6 +269,30 @@ export type CreateProgramStandardMappingPayload = {
   program_id: string;
   standard_id: string;
   applicability: string;
+  status: string;
+  metadata_json: Record<string, unknown> | null;
+};
+
+export type CreateCdrlPayload = {
+  tenant_id: string;
+  program_id: string;
+  cdrl_number: string;
+  title: string;
+  description: string | null;
+  deliverable_type: string | null;
+  frequency: string | null;
+  due_date: string | null;
+  status: string;
+  owner_user_id: string | null;
+  metadata_json: Record<string, unknown> | null;
+};
+
+export type CreateCdrlClauseMappingPayload = {
+  tenant_id: string;
+  cdrl_id: string;
+  standard_clause_id: string;
+  applicability: string;
+  rationale: string | null;
   status: string;
   metadata_json: Record<string, unknown> | null;
 };
@@ -547,6 +581,43 @@ export async function createProgramStandardMapping(
 ): Promise<ProgramStandardMappingRecord> {
   return apiPost<ProgramStandardMappingRecord>(
     "/program-standard-mappings",
+    payload,
+    tenantUserHeaders(),
+  );
+}
+export async function getCdrlsForProgram(
+  programId: string,
+): Promise<CdrlListResponse> {
+  return apiGet<CdrlListResponse>(
+    `/cdrls/by-program/${programId}`,
+    tenantHeaders(),
+  );
+}
+
+export async function createCdrl(
+  payload: CreateCdrlPayload,
+): Promise<CdrlRecord> {
+  return apiPost<CdrlRecord>(
+    "/cdrls",
+    payload,
+    tenantUserHeaders(),
+  );
+}
+
+export async function getCdrlClauseMappings(
+  cdrlId: string,
+): Promise<CdrlClauseMappingListResponse> {
+  return apiGet<CdrlClauseMappingListResponse>(
+    `/cdrl-clause-mappings/by-cdrl/${cdrlId}`,
+    tenantHeaders(),
+  );
+}
+
+export async function createCdrlClauseMapping(
+  payload: CreateCdrlClauseMappingPayload,
+): Promise<CdrlClauseMappingRecord> {
+  return apiPost<CdrlClauseMappingRecord>(
+    "/cdrl-clause-mappings",
     payload,
     tenantUserHeaders(),
   );

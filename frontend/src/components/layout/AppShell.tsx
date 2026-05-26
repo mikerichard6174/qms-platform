@@ -8,11 +8,8 @@ type ActiveNav =
   | "dashboard"
   | "programs"
   | "documents"
-  | "revisions"
-  | "approvals"
   | "audit-events"
   | "admin"
-  | "admin-standards"
   | "standards"
   | "ncr-capa";
 
@@ -21,16 +18,23 @@ type AppShellProps = {
   activeNav?: ActiveNav;
 };
 
-function navClass(isActive: boolean): string {
-  if (isActive) {
-    return "block rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white";
+type NavItem = {
+  label: string;
+  href: string;
+  key: ActiveNav;
+  disabled?: boolean;
+};
+
+function navClass(isActive: boolean, disabled?: boolean): string {
+  if (disabled) {
+    return "block rounded-xl px-4 py-3 text-sm font-medium text-slate-400";
   }
 
-  return "block rounded-lg px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100";
-}
+  if (isActive) {
+    return "block rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white";
+  }
 
-function disabledNavClass(): string {
-  return "block rounded-lg px-4 py-3 text-sm font-medium text-slate-400";
+  return "block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100";
 }
 
 function resolveActiveNav(
@@ -39,14 +43,6 @@ function resolveActiveNav(
 ): ActiveNav {
   if (explicitActiveNav) {
     return explicitActiveNav;
-  }
-
-  if (pathname.startsWith("/admin/standards")) {
-    return "admin-standards";
-  }
-
-  if (pathname.startsWith("/admin")) {
-    return "admin";
   }
 
   if (pathname.startsWith("/programs")) {
@@ -65,13 +61,58 @@ function resolveActiveNav(
     return "audit-events";
   }
 
+  if (pathname.startsWith("/admin")) {
+    return "admin";
+  }
+
   return "dashboard";
 }
 
 export function AppShell({ children, activeNav }: AppShellProps) {
   const pathname = usePathname();
-
   const resolvedActiveNav = resolveActiveNav(pathname, activeNav);
+
+  const primaryNavItems: NavItem[] = [
+    {
+      label: "Control Center",
+      href: "/",
+      key: "dashboard",
+    },
+    {
+      label: "Programs",
+      href: "/programs",
+      key: "programs",
+    },
+    {
+      label: "Standards Library",
+      href: "/standards",
+      key: "standards",
+    },
+    {
+      label: "Documents",
+      href: "/documents",
+      key: "documents",
+    },
+    {
+      label: "NCR / CAPA",
+      href: "/ncr-capa",
+      key: "ncr-capa",
+      disabled: true,
+    },
+    {
+      label: "Audit Trail",
+      href: "/audit-events",
+      key: "audit-events",
+    },
+  ];
+
+  const adminNavItems: NavItem[] = [
+    {
+      label: "Admin Tools",
+      href: "/admin",
+      key: "admin",
+    },
+  ];
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -87,60 +128,57 @@ export function AppShell({ children, activeNav }: AppShellProps) {
             </h1>
           </div>
 
-          <nav className="space-y-2">
-            <Link
-              href="/"
-              className={navClass(resolvedActiveNav === "dashboard")}
-            >
-              Control Center
-            </Link>
+          <nav className="space-y-8">
+            <div>
+              <p className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Workspace
+              </p>
 
-            <Link
-              href="/programs"
-              className={navClass(resolvedActiveNav === "programs")}
-            >
-              Program Registry
-            </Link>
+              <div className="space-y-2">
+                {primaryNavItems.map((item) => {
+                  const isActive = resolvedActiveNav === item.key;
 
-            <Link
-              href="/documents"
-              className={navClass(resolvedActiveNav === "documents")}
-            >
-              Document Register
-            </Link>
+                  if (item.disabled) {
+                    return (
+                      <span
+                        key={item.key}
+                        className={navClass(isActive, item.disabled)}
+                      >
+                        {item.label}
+                      </span>
+                    );
+                  }
 
-            <Link
-              href="/standards"
-              className={navClass(resolvedActiveNav === "standards")}
-            >
-              Standards Library
-            </Link>
+                  return (
+                    <Link
+                      key={item.key}
+                      href={item.href}
+                      className={navClass(isActive)}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
 
-            <Link
-              href="/admin"
-              className={navClass(resolvedActiveNav === "admin")}
-            >
-              Admin Tools
-            </Link>
+            <div>
+              <p className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Administration
+              </p>
 
-            <Link
-              href="/admin/standards"
-              className={navClass(resolvedActiveNav === "admin-standards")}
-            >
-              Standards Admin
-            </Link>
-
-            <a className={disabledNavClass()}>Revisions</a>
-            <a className={disabledNavClass()}>Approvals</a>
-
-            <Link
-              href="/audit-events"
-              className={navClass(resolvedActiveNav === "audit-events")}
-            >
-              Audit Trail
-            </Link>
-
-            <a className={disabledNavClass()}>NCR / CAPA</a>
+              <div className="space-y-2">
+                {adminNavItems.map((item) => (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    className={navClass(resolvedActiveNav === item.key)}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
           </nav>
         </aside>
 
