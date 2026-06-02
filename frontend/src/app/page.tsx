@@ -1,10 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { WorkspaceActionCard } from "@/components/workspace/WorkspaceActionCard";
+import { WorkspaceEmptyState } from "@/components/workspace/WorkspaceEmptyState";
+import { WorkspacePageHeader } from "@/components/workspace/WorkspacePageHeader";
+import { WorkspaceSectionCard } from "@/components/workspace/WorkspaceSectionCard";
+import { WorkspaceStatCard } from "@/components/workspace/WorkspaceStatCard";
+import { WorkspaceStatusBadge } from "@/components/workspace/WorkspaceStatusBadge";
 import { getDashboardSummary, getDocuments } from "@/lib/api";
 import type { DashboardSummary } from "@/types/dashboard";
 import type { DocumentRecord } from "@/types/document";
@@ -29,10 +35,22 @@ export default function Home() {
     "border-slate-200 bg-white text-slate-700",
   );
   const [sessionDisplay, setSessionDisplay] = useState<SessionDisplay>({
-    tenantName: "Unknown tenant",
+    tenantName: "Unknown organization",
     userName: "Unknown user",
   });
   const [isLoading, setIsLoading] = useState(true);
+
+  const recentDocuments = useMemo(() => {
+    return documents.slice(0, 5);
+  }, [documents]);
+
+  const controlledDocumentCount = useMemo(() => {
+    return documents.filter((document) => document.is_controlled).length;
+  }, [documents]);
+
+  const unassignedDocumentCount = useMemo(() => {
+    return documents.filter((document) => !document.program_id).length;
+  }, [documents]);
 
   function handleLogout() {
     sessionStorage.removeItem("tenant_id");
@@ -91,166 +109,210 @@ export default function Home() {
   if (isLoading) {
     return (
       <main className="min-h-screen bg-slate-950 p-8 text-white">
-        Loading session...
+        Loading control center...
       </main>
     );
   }
 
   return (
     <AppShell activeNav="dashboard">
-      <header className="mb-8 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-slate-500">
-            Document Control MVP
-          </p>
-          <h2 className="mt-1 text-3xl font-bold text-slate-950">
-            QMS Control Center
-          </h2>
-        </div>
+      <WorkspacePageHeader
+        breadcrumbs={[
+          {
+            label: "Control Center",
+          },
+        ]}
+        eyebrow="QMS Overview"
+        title="Control Center"
+        description={`Operational snapshot for ${sessionDisplay.tenantName}. Review document control activity, approval workload, and quick access areas from one place.`}
+      />
 
-        <div className="flex items-center gap-3">
-          <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
-            User: {sessionDisplay.userName} | Tenant:{" "}
-            {sessionDisplay.tenantName}
-          </div>
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <span
+          className={`rounded-full border px-4 py-2 text-sm font-medium ${backendStatusClass}`}
+        >
+          Backend: {backendStatus}
+        </span>
 
-          <div
-            className={`rounded-full border px-4 py-2 text-sm font-medium ${backendStatusClass}`}
-          >
-            Backend: {backendStatus}
-          </div>
+        <span className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
+          User: {sessionDisplay.userName}
+        </span>
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Log out
-          </button>
-        </div>
-      </header>
-
-      <div className="grid gap-6 md:grid-cols-4">
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">
-            Controlled Documents
-          </p>
-          <p className="mt-3 text-4xl font-bold text-slate-950">
-            {summary.total_documents}
-          </p>
-          <p className="mt-2 text-sm text-slate-500">
-            Documents tracked in the QMS.
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">
-            Revisions in Review
-          </p>
-          <p className="mt-3 text-4xl font-bold text-slate-950">
-            {summary.revisions_in_review}
-          </p>
-          <p className="mt-2 text-sm text-slate-500">
-            Revisions waiting on approval.
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">
-            Effective Revisions
-          </p>
-          <p className="mt-3 text-4xl font-bold text-slate-950">
-            {summary.effective_revisions}
-          </p>
-          <p className="mt-2 text-sm text-slate-500">
-            Active controlled revisions.
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">
-            Pending Approvals
-          </p>
-          <p className="mt-3 text-4xl font-bold text-slate-950">
-            {summary.pending_approvals}
-          </p>
-          <p className="mt-2 text-sm text-slate-500">
-            Approval actions still open.
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Log out
+        </button>
       </div>
 
-      <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-bold text-slate-950">
-              Recent Controlled Documents
-            </h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Live document data pulled from your FastAPI backend.
-            </p>
+      <section className="grid gap-4 lg:grid-cols-4">
+        <WorkspaceStatCard
+          label="Controlled Documents"
+          value={summary.total_documents}
+          helperText="Documents tracked in the QMS."
+        />
+
+        <WorkspaceStatCard
+          label="Revisions in Review"
+          value={summary.revisions_in_review}
+          helperText="Revisions waiting on approval."
+        />
+
+        <WorkspaceStatCard
+          label="Effective Revisions"
+          value={summary.effective_revisions}
+          helperText="Active controlled revisions."
+        />
+
+        <WorkspaceStatCard
+          label="Pending Approvals"
+          value={summary.pending_approvals}
+          helperText="Approval actions still open."
+        />
+      </section>
+
+      <section className="mt-8 grid gap-6 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <WorkspaceSectionCard
+            title="Operational Snapshot"
+            description="High-level indicators for current document control activity."
+          >
+            <div className="grid gap-4 md:grid-cols-3">
+              <WorkspaceStatCard
+                label="Visible Documents"
+                value={documents.length}
+                helperText="Document records currently available."
+              />
+
+              <WorkspaceStatCard
+                label="Controlled"
+                value={controlledDocumentCount}
+                helperText="Documents under formal control."
+              />
+
+              <WorkspaceStatCard
+                label="Unassigned"
+                value={unassignedDocumentCount}
+                helperText="Documents needing program assignment."
+              />
+            </div>
+          </WorkspaceSectionCard>
+        </div>
+
+        <WorkspaceSectionCard
+          title="Quick Access"
+          description="Open the most common work areas."
+        >
+          <div className="space-y-3">
+            <WorkspaceActionCard
+              title="Programs"
+              description="Open program workspaces for standards, deliverables, and readiness."
+              href="/programs"
+            />
+
+            <WorkspaceActionCard
+              title="Documents"
+              description="Search and manage controlled document records."
+              href="/documents"
+            />
+
+            <WorkspaceActionCard
+              title="Audit Trail"
+              description="Review evidence of document, revision, and approval activity."
+              href="/audit-events"
+            />
+
+            <WorkspaceActionCard
+              title="Admin Hub"
+              description="Manage standards, access, and cleanup tasks."
+              href="/admin"
+            />
+          </div>
+        </WorkspaceSectionCard>
+      </section>
+
+      <div className="mt-8">
+        <WorkspaceSectionCard
+          title="Recent Controlled Documents"
+          description="Recent document records pulled from the backend."
+        >
+          <div className="mb-5 flex justify-end">
+            <Link
+              href="/documents"
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              View All Documents
+            </Link>
           </div>
 
-          <Link
-            href="/documents"
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-          >
-            View all documents
-          </Link>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-slate-200">
-          <table className="w-full border-collapse text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Document #</th>
-                <th className="px-4 py-3 font-semibold">Title</th>
-                <th className="px-4 py-3 font-semibold">Type</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 font-semibold">Current Revision</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
-              {documents.length === 0 ? (
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead className="bg-slate-50 text-slate-600">
                 <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-6 text-center text-slate-500"
-                  >
-                    No documents found.
-                  </td>
+                  <th className="px-4 py-3 font-semibold">Document Number</th>
+                  <th className="px-4 py-3 font-semibold">Title</th>
+                  <th className="px-4 py-3 font-semibold">Type</th>
+                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 font-semibold">Current Revision</th>
+                  <th className="px-4 py-3 font-semibold">Action</th>
                 </tr>
-              ) : (
-                documents.slice(0, 5).map((document) => (
-                  <tr key={document.id}>
-                    <td className="px-4 py-3 font-medium text-slate-950">
-                      <Link
-                        href={`/documents/${document.id}`}
-                        className="hover:underline"
-                      >
-                        {document.document_number}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">
-                      {document.title}
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">
-                      {document.document_type}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                        {document.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">
-                      {document.current_revision_id ? "Assigned" : "None"}
+              </thead>
+
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {recentDocuments.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6">
+                      <WorkspaceEmptyState
+                        title="No documents found"
+                        description="Create the first document record to begin using the QMS control center."
+                      />
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  recentDocuments.map((document) => (
+                    <tr key={document.id}>
+                      <td className="px-4 py-3 font-medium text-slate-950">
+                        <Link
+                          href={`/documents/${document.id}`}
+                          className="hover:underline"
+                        >
+                          {document.document_number}
+                        </Link>
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-700">
+                        {document.title}
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-700">
+                        {document.document_type}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <WorkspaceStatusBadge status={document.status} />
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-500">
+                        {document.current_revision_id ? "Assigned" : "None"}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/documents/${document.id}`}
+                          className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800"
+                        >
+                          Open
+                        </Link>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </WorkspaceSectionCard>
       </div>
     </AppShell>
   );

@@ -6,6 +6,11 @@ import { useRouter } from "next/navigation";
 
 import { CreateDocumentForm } from "@/components/documents/CreateDocumentForm";
 import { AppShell } from "@/components/layout/AppShell";
+import { WorkspaceEmptyState } from "@/components/workspace/WorkspaceEmptyState";
+import { WorkspacePageHeader } from "@/components/workspace/WorkspacePageHeader";
+import { WorkspaceSectionCard } from "@/components/workspace/WorkspaceSectionCard";
+import { WorkspaceStatCard } from "@/components/workspace/WorkspaceStatCard";
+import { WorkspaceStatusBadge } from "@/components/workspace/WorkspaceStatusBadge";
 import { getDocuments, getPrograms } from "@/lib/api";
 import type { DocumentRecord } from "@/types/document";
 import type { ProgramRecord } from "@/types/program";
@@ -108,7 +113,7 @@ export default function DocumentsPage() {
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [programs, setPrograms] = useState<ProgramRecord[]>([]);
-  const [tenantName, setTenantName] = useState("Unknown tenant");
+  const [tenantName, setTenantName] = useState("Unknown organization");
   const [isLoading, setIsLoading] = useState(true);
 
   const [searchText, setSearchText] = useState("");
@@ -162,6 +167,14 @@ export default function DocumentsPage() {
     )
       .filter(Boolean)
       .sort();
+  }, [documents]);
+
+  const controlledDocumentCount = useMemo(() => {
+    return documents.filter((document) => document.is_controlled).length;
+  }, [documents]);
+
+  const unassignedDocumentCount = useMemo(() => {
+    return documents.filter((document) => !document.program_id).length;
   }, [documents]);
 
   const filteredDocuments = useMemo(() => {
@@ -260,277 +273,306 @@ export default function DocumentsPage() {
 
   return (
     <AppShell activeNav="documents">
-      <header className="mb-8 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-slate-500">
-            Document Control
-          </p>
+      <WorkspacePageHeader
+        breadcrumbs={[
+          {
+            label: "Documents",
+          },
+        ]}
+        eyebrow="Document Control"
+        title="Documents"
+        description={`Create, search, and manage controlled document records for ${tenantName}. Program visibility will control what users can see as role-based access expands.`}
+      />
 
-          <h2 className="mt-1 text-3xl font-bold text-slate-950">
-            Document Register
-          </h2>
+      <section className="grid gap-4 lg:grid-cols-4">
+        <WorkspaceStatCard
+          label="Total Documents"
+          value={documents.length}
+          helperText="Document records available to you."
+        />
 
-          <p className="mt-2 text-sm text-slate-500">Tenant: {tenantName}</p>
-        </div>
+        <WorkspaceStatCard
+          label="Controlled"
+          value={controlledDocumentCount}
+          helperText="Documents managed under control."
+        />
 
-        <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
-          Showing {filteredDocuments.length} of {documents.length}
-        </div>
-      </header>
+        <WorkspaceStatCard
+          label="Unassigned"
+          value={unassignedDocumentCount}
+          helperText="Documents that need a program assignment."
+        />
 
-      <CreateDocumentForm onChanged={loadDocuments} />
+        <WorkspaceStatCard
+          label="Showing"
+          value={filteredDocuments.length}
+          helperText="Documents matching the current filters."
+        />
+      </section>
 
-      <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
-        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h3 className="text-xl font-bold text-slate-950">
-              Document Register
-            </h3>
+      <div className="mt-8">
+        <WorkspaceSectionCard
+          title="Add Document"
+          description="Create a new document record so it can be reviewed, revised, approved, and governed."
+        >
+          <CreateDocumentForm onChanged={loadDocuments} />
+        </WorkspaceSectionCard>
+      </div>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Search, filter, and sort controlled document master records by
-              program scope.
-            </p>
+      <div className="mt-8">
+        <WorkspaceSectionCard
+          title="Document Register"
+          description="Search and filter document records by program, type, status, and control type."
+        >
+          <div className="mb-5 grid gap-4 lg:grid-cols-4">
+            <label className="block lg:col-span-2">
+              <span className="text-sm font-medium text-slate-700">
+                Search
+              </span>
+
+              <input
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Search document number, title, type, status, or program"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">
+                Program
+              </span>
+
+              <select
+                value={programFilter}
+                onChange={(event) => setProgramFilter(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="all">All accessible programs</option>
+
+                {programs.map((program) => (
+                  <option key={program.id} value={program.id}>
+                    {program.code
+                      ? `${program.code} - ${program.name}`
+                      : program.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">
+                Status
+              </span>
+
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="all">All statuses</option>
+
+                {statusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {status.replaceAll("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Clear filters
-          </button>
-        </div>
+          <div className="mb-5 grid gap-4 lg:grid-cols-3">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Type</span>
 
-        <div className="mb-5 grid gap-4 lg:grid-cols-4">
-          <label className="block lg:col-span-2">
-            <span className="text-sm font-medium text-slate-700">Search</span>
+              <select
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="all">All types</option>
 
-            <input
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Search document number, title, type, status, or program"
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </label>
+                {typeOptions.map((documentType) => (
+                  <option key={documentType} value={documentType}>
+                    {documentType}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Program</span>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">
+                Control Type
+              </span>
 
-            <select
-              value={programFilter}
-              onChange={(event) => setProgramFilter(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="all">All accessible programs</option>
-              {programs.map((program) => (
-                <option key={program.id} value={program.id}>
-                  {program.code ? `${program.code} - ${program.name}` : program.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              <select
+                value={controlledFilter}
+                onChange={(event) =>
+                  setControlledFilter(event.target.value as ControlledFilter)
+                }
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="all">All documents</option>
+                <option value="controlled">Controlled only</option>
+                <option value="uncontrolled">Uncontrolled only</option>
+              </select>
+            </label>
 
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Status</span>
+            <div className="flex items-end justify-end">
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 lg:w-auto"
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
 
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="all">All statuses</option>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="mb-5 grid gap-4 lg:grid-cols-2">
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Type</span>
-
-            <select
-              value={typeFilter}
-              onChange={(event) => setTypeFilter(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="all">All types</option>
-              {typeOptions.map((documentType) => (
-                <option key={documentType} value={documentType}>
-                  {documentType}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">
-              Control Type
-            </span>
-
-            <select
-              value={controlledFilter}
-              onChange={(event) =>
-                setControlledFilter(event.target.value as ControlledFilter)
-              }
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="all">All documents</option>
-              <option value="controlled">Controlled only</option>
-              <option value="uncontrolled">Uncontrolled only</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-slate-200">
-          <table className="w-full border-collapse text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-4 py-3 font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => updateSort("document_number")}
-                    className="font-semibold hover:underline"
-                  >
-                    Document #{sortLabel("document_number")}
-                  </button>
-                </th>
-
-                <th className="px-4 py-3 font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => updateSort("title")}
-                    className="font-semibold hover:underline"
-                  >
-                    Title{sortLabel("title")}
-                  </button>
-                </th>
-
-                <th className="px-4 py-3 font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => updateSort("program_id")}
-                    className="font-semibold hover:underline"
-                  >
-                    Program{sortLabel("program_id")}
-                  </button>
-                </th>
-
-                <th className="px-4 py-3 font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => updateSort("document_type")}
-                    className="font-semibold hover:underline"
-                  >
-                    Type{sortLabel("document_type")}
-                  </button>
-                </th>
-
-                <th className="px-4 py-3 font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => updateSort("status")}
-                    className="font-semibold hover:underline"
-                  >
-                    Status{sortLabel("status")}
-                  </button>
-                </th>
-
-                <th className="px-4 py-3 font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => updateSort("is_controlled")}
-                    className="font-semibold hover:underline"
-                  >
-                    Controlled{sortLabel("is_controlled")}
-                  </button>
-                </th>
-
-                <th className="px-4 py-3 font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => updateSort("review_due_date")}
-                    className="font-semibold hover:underline"
-                  >
-                    Review Due{sortLabel("review_due_date")}
-                  </button>
-                </th>
-
-                <th className="px-4 py-3 font-semibold">Action</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-200 bg-white">
-              {filteredDocuments.length === 0 ? (
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead className="bg-slate-50 text-slate-600">
                 <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-6 text-center text-slate-500"
-                  >
-                    No documents match the selected filters.
-                  </td>
-                </tr>
-              ) : (
-                filteredDocuments.map((document) => (
-                  <tr key={document.id}>
-                    <td className="px-4 py-3 font-medium text-slate-950">
-                      <Link
-                        href={`/documents/${document.id}`}
-                        className="hover:underline"
-                      >
-                        {document.document_number}
-                      </Link>
-                    </td>
-
-                    <td className="px-4 py-3 text-slate-700">
-                      {document.title}
-                    </td>
-
-                    <td className="px-4 py-3 text-slate-700">
-                      {getProgramLabel(document.program_id, programsById)}
-                    </td>
-
-                    <td className="px-4 py-3 text-slate-700">
-                      {document.document_type}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                        {document.status}
-                      </span>
-                    </td>
-
-                    <td className="px-4 py-3 text-slate-700">
-                      {document.is_controlled ? "Yes" : "No"}
-                    </td>
-
-                    <td
-                      className={`px-4 py-3 ${getReviewDueClass(
-                        document.review_due_date,
-                      )}`}
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => updateSort("document_number")}
+                      className="font-semibold hover:underline"
                     >
-                      {formatDate(document.review_due_date)}
-                    </td>
+                      Document Number{sortLabel("document_number")}
+                    </button>
+                  </th>
 
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/documents/${document.id}`}
-                        className="text-sm font-medium text-slate-950 hover:underline"
-                      >
-                        View workspace
-                      </Link>
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => updateSort("title")}
+                      className="font-semibold hover:underline"
+                    >
+                      Title{sortLabel("title")}
+                    </button>
+                  </th>
+
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => updateSort("program_id")}
+                      className="font-semibold hover:underline"
+                    >
+                      Program{sortLabel("program_id")}
+                    </button>
+                  </th>
+
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => updateSort("document_type")}
+                      className="font-semibold hover:underline"
+                    >
+                      Type{sortLabel("document_type")}
+                    </button>
+                  </th>
+
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => updateSort("status")}
+                      className="font-semibold hover:underline"
+                    >
+                      Status{sortLabel("status")}
+                    </button>
+                  </th>
+
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => updateSort("is_controlled")}
+                      className="font-semibold hover:underline"
+                    >
+                      Controlled{sortLabel("is_controlled")}
+                    </button>
+                  </th>
+
+                  <th className="px-4 py-3 font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => updateSort("review_due_date")}
+                      className="font-semibold hover:underline"
+                    >
+                      Review Due{sortLabel("review_due_date")}
+                    </button>
+                  </th>
+
+                  <th className="px-4 py-3 font-semibold">Action</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {filteredDocuments.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-6">
+                      <WorkspaceEmptyState
+                        title="No documents found"
+                        description="Create a document or adjust the filters to see more records."
+                      />
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                ) : (
+                  filteredDocuments.map((document) => (
+                    <tr key={document.id}>
+                      <td className="px-4 py-3 font-medium text-slate-950">
+                        <Link
+                          href={`/documents/${document.id}`}
+                          className="hover:underline"
+                        >
+                          {document.document_number}
+                        </Link>
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-700">
+                        {document.title}
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-700">
+                        {getProgramLabel(document.program_id, programsById)}
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-700">
+                        {document.document_type}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <WorkspaceStatusBadge status={document.status} />
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-700">
+                        {document.is_controlled ? "Yes" : "No"}
+                      </td>
+
+                      <td
+                        className={`px-4 py-3 ${getReviewDueClass(
+                          document.review_due_date,
+                        )}`}
+                      >
+                        {formatDate(document.review_due_date)}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/documents/${document.id}`}
+                          className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800"
+                        >
+                          Open
+                        </Link>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </WorkspaceSectionCard>
+      </div>
     </AppShell>
   );
 }

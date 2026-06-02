@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AuditEvidenceSummary } from "@/components/documents/AuditEvidenceSummary";
-import { ApprovalStatusBadge } from "@/components/documents/ApprovalStatusBadge";
 import { ApprovalReadinessIndicator } from "@/components/documents/ApprovalReadinessIndicator";
+import { ApprovalStatusBadge } from "@/components/documents/ApprovalStatusBadge";
 import { AuditEventTimeline } from "@/components/documents/AuditEventTimeline";
 import { CreateApprovalForm } from "@/components/documents/CreateApprovalForm";
 import { CreateRevisionForm } from "@/components/documents/CreateRevisionForm";
@@ -15,6 +14,11 @@ import { DocumentWorkflowActions } from "@/components/documents/DocumentWorkflow
 import { ReviewerActionPanel } from "@/components/documents/ReviewerActionPanel";
 import { RevisionWorkflowGuidance } from "@/components/documents/RevisionWorkflowGuidance";
 import { AppShell } from "@/components/layout/AppShell";
+import { WorkspaceEmptyState } from "@/components/workspace/WorkspaceEmptyState";
+import { WorkspacePageHeader } from "@/components/workspace/WorkspacePageHeader";
+import { WorkspaceSectionCard } from "@/components/workspace/WorkspaceSectionCard";
+import { WorkspaceStatCard } from "@/components/workspace/WorkspaceStatCard";
+import { WorkspaceStatusBadge } from "@/components/workspace/WorkspaceStatusBadge";
 import {
   getAuditEventsForEntity,
   getAuditEventsForTenant,
@@ -36,11 +40,6 @@ type DocumentDetailPageProps = {
   params: Promise<{
     id: string;
   }>;
-};
-
-type SessionDisplay = {
-  tenantName: string;
-  userName: string;
 };
 
 function formatDateTime(value: string | null): string {
@@ -67,21 +66,13 @@ function getProgramLabel(program: ProgramRecord | null): string {
   return program.code ? `${program.code} - ${program.name}` : program.name;
 }
 
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-      {status}
-    </span>
-  );
-}
-
-function BooleanBadge({ value }: { value: boolean }) {
+function ControlledBadge({ value }: { value: boolean }) {
   return value ? (
-    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
       Controlled
     </span>
   ) : (
-    <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+    <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
       Uncontrolled
     </span>
   );
@@ -90,14 +81,14 @@ function BooleanBadge({ value }: { value: boolean }) {
 function ProgramBadge({ program }: { program: ProgramRecord | null }) {
   if (!program) {
     return (
-      <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+      <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
         Program unavailable
       </span>
     );
   }
 
   return (
-    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+    <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
       Program: {getProgramLabel(program)}
     </span>
   );
@@ -225,10 +216,6 @@ export default function DocumentDetailPage({
     Record<string, DocumentApprovalRecord[]>
   >({});
   const [auditEvents, setAuditEvents] = useState<AuditEventRecord[]>([]);
-  const [sessionDisplay, setSessionDisplay] = useState<SessionDisplay>({
-    tenantName: "Unknown tenant",
-    userName: "Unknown user",
-  });
   const [isLoading, setIsLoading] = useState(true);
 
   const currentRevision = document?.current_revision_id
@@ -261,7 +248,6 @@ export default function DocumentDetailPage({
         : null;
 
       const revisionResponse = await getDocumentRevisions(resolvedParams.id);
-
       const revisionRecords = revisionResponse.items;
 
       const approvalRecordsByRevision =
@@ -273,11 +259,6 @@ export default function DocumentDetailPage({
         revisionRecords,
         approvalRecordsByRevision,
       );
-
-      setSessionDisplay({
-        tenantName: sessionStorage.getItem("tenant_name") ?? tenant,
-        userName: sessionStorage.getItem("user_name") ?? user,
-      });
 
       setDocument(documentRecord);
       setProgram(programRecord);
@@ -291,11 +272,6 @@ export default function DocumentDetailPage({
       setIsLoading(false);
     }
   }, [resolvedParams.id, router]);
-
-  function handleLogout() {
-    sessionStorage.clear();
-    router.push("/login");
-  }
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => void loadDocumentWorkspace(), 0);
@@ -313,65 +289,50 @@ export default function DocumentDetailPage({
   if (!document) {
     return (
       <AppShell activeNav="documents">
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
-          Document could not be loaded.
-        </div>
+        <WorkspaceEmptyState
+          title="Document could not be loaded"
+          description="Return to the document register and try opening the document again."
+        />
       </AppShell>
     );
   }
 
   return (
     <AppShell activeNav="documents">
-      <header className="mb-8 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-slate-500">
-            Document Workspace
-          </p>
+      <WorkspacePageHeader
+        breadcrumbs={[
+          {
+            label: "Documents",
+            href: "/documents",
+          },
+          {
+            label: document.document_number,
+          },
+        ]}
+        eyebrow="Document Workspace"
+        title={document.document_number}
+        description={`${document.title}
 
-          <h2 className="mt-1 text-3xl font-bold text-slate-950">
-            {document.document_number}
-          </h2>
-
-          <p className="mt-2 text-sm text-slate-500">{document.title}</p>
-
-          <div className="mt-3">
-            <ProgramBadge program={program} />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
-            User: {sessionDisplay.userName} | Tenant:{" "}
-            {sessionDisplay.tenantName}
-          </div>
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Log out
-          </button>
-        </div>
-      </header>
-
-      <div className="mb-6">
-        <Link
-          href="/documents"
-          className="text-sm font-medium text-slate-600 hover:text-slate-950"
-        >
-          ← Back to documents
-        </Link>
-      </div>
+Program: ${getProgramLabel(program)} | Type: ${
+          document.document_type
+        } | Review Due: ${formatDate(document.review_due_date)}`}
+        action={{
+          label: "Back to Documents",
+          href: "/documents",
+        }}
+      />
 
       <div className="grid gap-6 xl:grid-cols-4">
         <div className="xl:col-span-3">
-          <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <WorkspaceSectionCard
+            title="Document Overview"
+            description="Current document information, workflow status, and revision readiness."
+          >
             <div className="flex flex-wrap items-start justify-between gap-6">
               <div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <StatusBadge status={document.status} />
-                  <BooleanBadge value={document.is_controlled} />
+                  <WorkspaceStatusBadge status={document.status} />
+                  <ControlledBadge value={document.is_controlled} />
                   <ProgramBadge program={program} />
                 </div>
 
@@ -424,7 +385,7 @@ export default function DocumentDetailPage({
                   </p>
 
                   <p className="mt-1 text-xs text-blue-700">
-                    Access is controlled by user-program assignment.
+                    Access is controlled by program assignment.
                   </p>
                 </div>
 
@@ -455,53 +416,37 @@ export default function DocumentDetailPage({
                 </div>
               </div>
             </div>
-          </section>
+          </WorkspaceSectionCard>
 
           <ReviewerActionPanel
             revisions={revisions}
             approvalsByRevision={approvalsByRevision}
           />
 
-          <section className="mt-8 grid gap-6 lg:grid-cols-4">
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <p className="text-sm font-medium text-slate-500">
-                Current Revision
-              </p>
+          <section className="mt-8 grid gap-4 lg:grid-cols-4">
+            <WorkspaceStatCard
+              label="Current Revision"
+              value={currentRevision?.revision_label ?? "None"}
+              helperText="Revision currently marked as current."
+            />
 
-              <p className="mt-3 text-3xl font-bold text-slate-950">
-                {currentRevision?.revision_label ?? "None"}
-              </p>
-            </div>
+            <WorkspaceStatCard
+              label="Effective Revision"
+              value={effectiveRevision?.revision_label ?? "None"}
+              helperText="Revision currently marked as effective."
+            />
 
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <p className="text-sm font-medium text-slate-500">
-                Effective Revision
-              </p>
+            <WorkspaceStatCard
+              label="Total Revisions"
+              value={revisions.length}
+              helperText="Controlled revisions for this document."
+            />
 
-              <p className="mt-3 text-3xl font-bold text-slate-950">
-                {effectiveRevision?.revision_label ?? "None"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <p className="text-sm font-medium text-slate-500">
-                Total Revisions
-              </p>
-
-              <p className="mt-3 text-3xl font-bold text-slate-950">
-                {revisions.length}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <p className="text-sm font-medium text-slate-500">
-                Pending Approvals
-              </p>
-
-              <p className="mt-3 text-3xl font-bold text-slate-950">
-                {pendingApprovalCount}
-              </p>
-            </div>
+            <WorkspaceStatCard
+              label="Pending Approvals"
+              value={pendingApprovalCount}
+              helperText="Approvals still waiting for action."
+            />
           </section>
 
           <AuditEvidenceSummary
@@ -530,219 +475,209 @@ export default function DocumentDetailPage({
         </div>
       </div>
 
-      <section
-        id="revision-timeline"
-        className="mt-8 rounded-2xl bg-white p-6 shadow-sm"
-      >
-        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h3 className="text-xl font-bold text-slate-950">
-              Revision Timeline
-            </h3>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Controlled revisions associated with this document.
-            </p>
-          </div>
-
-          <div className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
-            Total revisions: {revisions.length}
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          {revisions.length === 0 ? (
-            <div className="rounded-xl border border-slate-200 p-6 text-center text-slate-500">
-              No revisions found for this document.
+      <div id="revision-timeline" className="mt-8">
+        <WorkspaceSectionCard
+          title="Revision Timeline"
+          description="Controlled revisions associated with this document."
+        >
+          <div className="mb-5 flex justify-end">
+            <div className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
+              Total Revisions: {revisions.length}
             </div>
-          ) : (
-            revisions.map((revision) => {
-              const approvals = approvalsByRevision[revision.id] ?? [];
+          </div>
 
-              return (
-                <article
-                  id={`revision-${revision.id}`}
-                  key={revision.id}
-                  className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h4 className="text-xl font-bold text-slate-950">
-                          Revision {revision.revision_label}
-                        </h4>
+          <div className="space-y-4">
+            {revisions.length === 0 ? (
+              <WorkspaceEmptyState
+                title="No revisions available"
+                description="Create the first revision to begin the controlled review and approval workflow."
+              />
+            ) : (
+              revisions.map((revision) => {
+                const approvals = approvalsByRevision[revision.id] ?? [];
 
-                        <StatusBadge status={revision.status} />
-                        <ProgramBadge program={program} />
+                return (
+                  <article
+                    id={`revision-${revision.id}`}
+                    key={revision.id}
+                    className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h4 className="text-xl font-bold text-slate-950">
+                            Revision {revision.revision_label}
+                          </h4>
 
-                        {revision.is_effective ? (
-                          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                            Effective
-                          </span>
-                        ) : null}
+                          <WorkspaceStatusBadge status={revision.status} />
 
-                        {revision.is_current ? (
-                          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-                            Current
-                          </span>
-                        ) : null}
+                          {revision.is_effective ? (
+                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                              Effective
+                            </span>
+                          ) : null}
+
+                          {revision.is_current ? (
+                            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                              Current
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
+                          {revision.change_summary ??
+                            "No change summary provided."}
+                        </p>
                       </div>
 
-                      <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-                        {revision.change_summary ??
-                          "No change summary provided."}
-                      </p>
+                      <div className="grid min-w-56 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                        <div className="flex justify-between gap-4">
+                          <span className="text-slate-500">Program</span>
+
+                          <span className="font-medium text-slate-950">
+                            {program?.code ?? program?.name ?? "Unavailable"}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between gap-4">
+                          <span className="text-slate-500">Created</span>
+
+                          <span className="font-medium text-slate-950">
+                            {formatDateTime(revision.created_at)}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between gap-4">
+                          <span className="text-slate-500">Submitted</span>
+
+                          <span className="font-medium text-slate-950">
+                            {formatDateTime(
+                              revision.submitted_for_approval_at,
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between gap-4">
+                          <span className="text-slate-500">Approved</span>
+
+                          <span className="font-medium text-slate-950">
+                            {formatDateTime(revision.approved_at)}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between gap-4">
+                          <span className="text-slate-500">Effective</span>
+
+                          <span className="font-medium text-slate-950">
+                            {formatDate(revision.effective_date)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="grid min-w-56 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                      <div className="flex justify-between gap-4">
-                        <span className="text-slate-500">Program</span>
+                    <RevisionWorkflowGuidance
+                      revision={revision}
+                      approvals={approvals}
+                    />
 
-                        <span className="font-medium text-slate-950">
-                          {program?.code ?? program?.name ?? "Unavailable"}
-                        </span>
-                      </div>
+                    <details className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <summary className="cursor-pointer text-sm font-semibold text-slate-950">
+                        View approval records
+                      </summary>
 
-                      <div className="flex justify-between gap-4">
-                        <span className="text-slate-500">Created</span>
-
-                        <span className="font-medium text-slate-950">
-                          {formatDateTime(revision.created_at)}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between gap-4">
-                        <span className="text-slate-500">Submitted</span>
-
-                        <span className="font-medium text-slate-950">
-                          {formatDateTime(
-                            revision.submitted_for_approval_at,
-                          )}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between gap-4">
-                        <span className="text-slate-500">Approved</span>
-
-                        <span className="font-medium text-slate-950">
-                          {formatDateTime(revision.approved_at)}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between gap-4">
-                        <span className="text-slate-500">Effective</span>
-
-                        <span className="font-medium text-slate-950">
-                          {formatDate(revision.effective_date)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <RevisionWorkflowGuidance
-                    revision={revision}
-                    approvals={approvals}
-                  />
-
-                  <details className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <summary className="cursor-pointer text-sm font-semibold text-slate-950">
-                      View approval records
-                    </summary>
-
-                    {approvals.length === 0 ? (
-                      <p className="mt-3 text-sm text-slate-500">
-                        No approvals assigned to this revision.
-                      </p>
-                    ) : (
-                      <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
-                        <table className="w-full border-collapse text-left text-sm">
-                          <thead className="bg-white text-slate-600">
-                            <tr>
-                              <th className="px-3 py-2 font-semibold">
-                                Approver
-                              </th>
-
-                              <th className="px-3 py-2 font-semibold">
-                                Type
-                              </th>
-
-                              <th className="px-3 py-2 font-semibold">
-                                Status
-                              </th>
-
-                              <th className="px-3 py-2 font-semibold">
-                                Readiness
-                              </th>
-
-                              <th className="px-3 py-2 font-semibold">
-                                Acted At
-                              </th>
-
-                              <th className="px-3 py-2 font-semibold">
-                                Comment
-                              </th>
-                            </tr>
-                          </thead>
-
-                          <tbody className="divide-y divide-slate-200 bg-white">
-                            {approvals.map((approval) => (
-                              <tr key={approval.id}>
-                                <td className="px-3 py-2 text-slate-700">
-                                  {approval.approver_user_id}
-                                </td>
-
-                                <td className="px-3 py-2 text-slate-700">
-                                  {approval.approval_type}
-                                </td>
-
-                                <td className="px-3 py-2">
-                                  <ApprovalStatusBadge
-                                    status={approval.status}
-                                  />
-                                </td>
-
-                                <td className="px-3 py-2">
-                                  <ApprovalReadinessIndicator
-                                    revision={revision}
-                                    approval={approval}
-                                  />
-                                </td>
-
-                                <td className="px-3 py-2 text-slate-500">
-                                  {formatDateTime(approval.acted_at)}
-                                </td>
-
-                                <td className="px-3 py-2 text-slate-500">
-                                  {approval.comment ?? "No comment"}
-                                </td>
+                      {approvals.length === 0 ? (
+                        <div className="mt-3">
+                          <WorkspaceEmptyState
+                            title="No approvals assigned"
+                            description="Create an approval record to begin the review workflow for this revision."
+                          />
+                        </div>
+                      ) : (
+                        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+                          <table className="w-full border-collapse text-left text-sm">
+                            <thead className="bg-white text-slate-600">
+                              <tr>
+                                <th className="px-3 py-2 font-semibold">
+                                  Approver
+                                </th>
+                                <th className="px-3 py-2 font-semibold">
+                                  Type
+                                </th>
+                                <th className="px-3 py-2 font-semibold">
+                                  Status
+                                </th>
+                                <th className="px-3 py-2 font-semibold">
+                                  Readiness
+                                </th>
+                                <th className="px-3 py-2 font-semibold">
+                                  Acted
+                                </th>
+                                <th className="px-3 py-2 font-semibold">
+                                  Comment
+                                </th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                            </thead>
 
-                    <CreateApprovalForm
-                      revisionId={revision.id}
-                      tenantId={revision.tenant_id}
-                      revisionStatus={revision.status}
-                      existingApprovalCount={approvals.length}
-                      defaultApproverUserId={DEFAULT_APPROVER_USER_ID}
+                            <tbody className="divide-y divide-slate-200 bg-white">
+                              {approvals.map((approval) => (
+                                <tr key={approval.id}>
+                                  <td className="px-3 py-2 text-slate-700">
+                                    {approval.approver_user_id}
+                                  </td>
+
+                                  <td className="px-3 py-2 text-slate-700">
+                                    {approval.approval_type}
+                                  </td>
+
+                                  <td className="px-3 py-2">
+                                    <ApprovalStatusBadge
+                                      status={approval.status}
+                                    />
+                                  </td>
+
+                                  <td className="px-3 py-2">
+                                    <ApprovalReadinessIndicator
+                                      revision={revision}
+                                      approval={approval}
+                                    />
+                                  </td>
+
+                                  <td className="px-3 py-2 text-slate-500">
+                                    {formatDateTime(approval.acted_at)}
+                                  </td>
+
+                                  <td className="px-3 py-2 text-slate-500">
+                                    {approval.comment ?? "No comment"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      <CreateApprovalForm
+                        revisionId={revision.id}
+                        tenantId={revision.tenant_id}
+                        revisionStatus={revision.status}
+                        existingApprovalCount={approvals.length}
+                        defaultApproverUserId={DEFAULT_APPROVER_USER_ID}
+                        onChanged={loadDocumentWorkspace}
+                      />
+                    </details>
+
+                    <DocumentWorkflowActions
+                      revision={revision}
+                      approvals={approvals}
                       onChanged={loadDocumentWorkspace}
                     />
-                  </details>
-
-                  <DocumentWorkflowActions
-                    revision={revision}
-                    approvals={approvals}
-                    onChanged={loadDocumentWorkspace}
-                  />
-                </article>
-              );
-            })
-          )}
-        </div>
-      </section>
+                  </article>
+                );
+              })
+            )}
+          </div>
+        </WorkspaceSectionCard>
+      </div>
 
       <div id="document-audit-trail">
         <AuditEventTimeline
